@@ -128,7 +128,11 @@ export default function EntriesPage() {
             await loadData();
         } catch (error) {
             console.error("Error creating entry:", error);
-            showToast('Error', 'No se pudo registrar la entrada', 'error');
+            if (error?.code === '22003') {
+                showToast('Error de Base de Datos', 'Un valor excede el límite permitido (posiblemente la cantidad o código de producto es muy grande para el tipo de dato definido en Supabase).', 'error');
+            } else {
+                showToast('Error', 'No se pudo registrar la entrada', 'error');
+            }
         } finally {
             setIsLoading(false);
         }
