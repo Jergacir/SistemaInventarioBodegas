@@ -21,10 +21,18 @@ function DashboardContent() {
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
+  const [data, setData] = useState({
+    lowStockItems: [],
+    pendingTransfers: [],
+    recentMovements: [],
+    principalTotal: 0,
+    instrumentacionTotal: 0,
+    isLoading: true
+  });
+
   useEffect(() => {
     if (searchParams.get("access_denied") === "true") {
       setShowAccessDenied(true);
-      // Remover el parámetro después de 5 segundos
       setTimeout(() => setShowAccessDenied(false), 5000);
     }
 
@@ -33,24 +41,58 @@ function DashboardContent() {
     if (userStr) {
       setCurrentUser(JSON.parse(userStr));
     }
-  }, [searchParams]);
-  const lowStockItems = Helpers.getLowStockProducts();
-  const pendingTransfers = Helpers.getPendingTransfers();
-  const recentMovements = DB.getAllMovements()
-    .filter((m) => m.estado === "C")
-    .sort(
-      (a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud),
-    )
-    .slice(0, 5);
 
-  // Calculate totals by warehouse
-  const inventory = DB.getAllInventory();
-  const principalTotal = inventory
-    .filter((i) => i.id_bodega === 1)
-    .reduce((sum, i) => sum + i.stock, 0);
-  const instrumentacionTotal = inventory
-    .filter((i) => i.id_bodega === 2)
-    .reduce((sum, i) => sum + i.stock, 0);
+    const loadDashboardData = async () => {
+      try {
+        const user = userStr ? JSON.parse(userStr) : null;
+
+        // Fetch notifications (low stock and pending)
+        const notifications = await DB.getNotifications(user?.rol);
+
+        // Fetch recent completed movements
+        const allMovements = await DB.getAllMovements();
+        const recent = allMovements
+          .filter((m) => m.estado === "C")
+          .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud))
+          .slice(0, 5);
+
+        // Fetch inventory totals
+        const inventory = await DB.getInventory(); // Note: supabaseDB.js uses getInventory which returns joined data
+        const principal = inventory
+          .filter((i) => i.id_bodega === 1)
+          .reduce((sum, i) => sum + i.stock, 0);
+        const instrumentacion = inventory
+          .filter((i) => i.id_bodega === 2)
+          .reduce((sum, i) => sum + i.stock, 0);
+
+        setData({
+          lowStockItems: notifications.lowStock,
+          pendingTransfers: notifications.pendingMovements,
+          recentMovements: recent,
+          principalTotal: principal,
+          instrumentacionTotal: instrumentacion,
+          isLoading: false
+        });
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+        setData(prev => ({ ...prev, isLoading: false }));
+      }
+    };
+
+    loadDashboardData();
+  }, [searchParams]);
+
+  const { lowStockItems, pendingTransfers, recentMovements, isLoading } = data;
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+          Cargando datos del panel...
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
