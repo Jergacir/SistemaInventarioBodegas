@@ -5,15 +5,15 @@ import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge, StatusBadge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
-import { MockData } from '../lib/mockData';
 
 export default function ExitsPage() {
     const [showForm, setShowForm] = useState(false);
     const [exits, setExits] = useState([]);
     const { openModal, closeModal } = useModal();
     const { showToast } = useToast();
+    const [isLoading, setIsLoading] = useState(true);
 
     // Form state
     const [warehouse, setWarehouse] = useState('2'); // Default to Instrumentacion
@@ -24,8 +24,9 @@ export default function ExitsPage() {
     const [availableStock, setAvailableStock] = useState('');
 
     const [availableProducts, setAvailableProducts] = useState([]);
-    const users = DB.getAllUsers().filter(u => u.rol !== 'A');
+    const [users, setUsers] = useState([]);
     const [requesterMode, setRequesterMode] = useState('select'); // 'select' or 'text'
+    const [fullInventory, setFullInventory] = useState([]);
 
     const [currentUser, setCurrentUser] = useState(null);
 
@@ -41,55 +42,81 @@ export default function ExitsPage() {
                 }
             }
         }
-        loadExits();
+        loadData();
     }, []);
 
-
-
     useEffect(() => {
-        updateProductOptions();
-    }, [warehouse]);
+        if (!isLoading) {
+            updateProductOptions();
+        }
+    }, [warehouse, fullInventory]);
 
-    const loadExits = () => {
-        const movements = DB.getAllMovements()
-            .filter(m => m.tipo === 'SAL' && m.estado !== 'R')
-            .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
-        setExits(movements);
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [movementsData, inventoryData, usersData] = await Promise.all([
+                DB.getAllMovements(),
+                DB.getInventory(),
+                DB.getAllUsers()
+            ]);
+
+            const exitMovements = movementsData
+                .filter(m => m.tipo === 'SAL' && m.estado !== 'R')
+                .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
+
+            setExits(exitMovements);
+            setFullInventory(inventoryData || []);
+            setUsers((usersData || []).filter(u => u.rol !== 'ADMIN')); // Filter out admins for requester list if desired? 
+
+        } catch (error) {
+            console.error("Error loading exits data:", error);
+            showToast('Error', 'No se pudieron cargar los datos', 'error');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const isOperator = currentUser && currentUser.rol !== 'ADMIN' && currentUser.rol !== 'SUPERVISOR';
 
     const updateProductOptions = () => {
         const idBodega = parseInt(warehouse);
-        const inventory = DB.getAllInventory()
-            .filter(i => i.id_bodega === idBodega && i.stock > 0);
+        // Filter inventory for selected warehouse and positive stock
+        const validInventory = fullInventory.filter(i => i.id_bodega === idBodega && i.stock > 0);
 
-        const products = inventory.map(i => {
-            const p = Helpers.getProduct(i.codigo_producto);
+        const products = validInventory.map(i => {
+            // i.producto is already hydrated by DB.getInventory
+            const p = i.producto;
             return p ? { ...p, stock: i.stock } : null;
         }).filter(Boolean);
 
         setAvailableProducts(products);
-        setProductId('');
-        setAvailableStock('');
+
+        // Reset selection if it's no longer valid
+        if (productId) {
+            const stillAvailable = products.find(p => p.id === productId || p.codigo_producto === productId);
+            if (!stillAvailable) {
+                setProductId('');
+                setAvailableStock('');
+            } else {
+                setAvailableStock(`${stillAvailable.stock} ${stillAvailable.unidad_medida?.toLowerCase() || ''}`);
+            }
+        }
     };
 
     const handleProductChange = (e) => {
         const id = e.target.value;
         setProductId(id);
 
-        const idBodega = parseInt(warehouse);
-        const inv = Helpers.getInventory(id, idBodega);
-        const product = DB.getProductById(id);
+        const productWithStock = availableProducts.find(p => p.id === id || p.codigo_producto === id);
 
-        if (inv && product) {
-            setAvailableStock(`${inv.stock} ${product.unidad_medida?.toLowerCase() || ''}`);
+        if (productWithStock) {
+            setAvailableStock(`${productWithStock.stock} ${productWithStock.unidad_medida?.toLowerCase() || ''}`);
         } else {
             setAvailableStock('');
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!productId || !quantity || parseFloat(quantity) <= 0 || !requester) {
@@ -97,52 +124,86 @@ export default function ExitsPage() {
             return;
         }
 
-        const product = DB.getProductById(productId);
-        const idBodega = parseInt(warehouse);
-        const inv = Helpers.getInventory(productId, idBodega);
+        const productWithStock = availableProducts.find(p => p.id === productId || p.codigo_producto === productId);
 
-        if (!inv || inv.stock < parseFloat(quantity)) {
-            showToast('Stock Insuficiente', `Solo hay ${inv?.stock || 0} ${product?.unidad_medida?.toLowerCase() || ''} disponibles`, 'error');
+        if (!productWithStock || productWithStock.stock < parseFloat(quantity)) {
+            showToast('Stock Insuficiente', `Solo hay ${productWithStock?.stock || 0} ${productWithStock?.unidad_medida?.toLowerCase() || ''} disponibles`, 'error');
             return;
         }
 
-        const currentUser = typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem('currentUser') || '{}') : {};
-        const canCreateDirect = currentUser.rol === 'ADMIN' || currentUser.rol === 'SUPERVISOR';
+        const currentUserLocal = typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem('currentUser') || '{}') : {};
+        const canCreateDirect = currentUserLocal.rol === 'ADMIN' || currentUserLocal.rol === 'SUPERVISOR';
 
-        const movementData = {
-            tipo: 'SAL',
-            codigo_producto: productId,
-            cantidad: parseFloat(quantity),
-            id_bodega_origen: idBodega,
-            id_bodega_destino: null,
-            id_solicitante: currentUser.id_usuario || 1,
-            solicitante_nombre: requester,
-            notas: notes,
-            estado: canCreateDirect ? 'C' : 'P',
-        };
+        setIsLoading(true);
+        try {
+            const movementData = {
+                tipo: 'SAL',
+                codigo_producto: productWithStock.codigo_producto,
+                cantidad: parseFloat(quantity),
+                id_bodega_origen: parseInt(warehouse),
+                id_bodega_destino: null,
+                id_solicitante: currentUserLocal.id_usuario || 1,
+                // We need to store extra info? DB schema for movimiento has solicitante FK. 
+                // If requester is external/text, we might need to handle it.
+                // Assuming schema supports arbitrary text if FK is null?
+                // Looking at DB schema: id_solicitante is FK to usuario. 
+                // We probably need to map "Other" to a specific generic user or rely on 'notas' if schema doesn't have solicitante_nombre text field.
+                // Wait, previous code used `solicitante_nombre: requester`. Let's assume DB has generic `id_solicitante` OR we just use current user as solicitante and put the real name in notes if it's external.
+                // For now, let's use current user as id_solicitante, and append requester name to notes if it's different.
 
-        const result = DB.createMovement(movementData);
+                // Correction: The UI allows selecting a USER. If user, use their ID. If external, use null? 
+                // Previous mock code: `solicitante_nombre: requester`. 
+                // DB.createExit will strip unknown fields?
+                // Let's pass `id_solicitante` as the selected user ID if found, else maybe generic.
 
-        if (canCreateDirect) {
-            showToast('Salida Registrada', `${result.codigo_movimiento}: ${quantity} ${product?.unidad_medida?.toLowerCase()} entregados`, 'success');
-        } else {
-            showToast('Solicitud Enviada', 'Solicitud de salida enviada para aprobación', 'info');
+                id_responsable: currentUserLocal.id_usuario || 1,
+                notas: `${notes} - Solicitado por: ${requester}`,
+                estado: canCreateDirect ? 'C' : 'P',
+            };
+
+            // Try to find if requester is a known user
+            const knownUser = users.find(u => u.nombre_completo === requester);
+            if (knownUser) {
+                movementData.id_solicitante = knownUser.id_usuario;
+            } else {
+                // External requester. DB schema requires id_solicitante?
+                // `id_solicitante` is nullable in many schemas but checked in yours. 
+                // Let's assume it IS nullable or we use current user as proxy.
+                // I will set it to currentUser.id_usuario if external, to satisfy FK if strict.
+                movementData.id_solicitante = currentUserLocal.id_usuario || 1;
+            }
+
+            const result = await DB.createExit(movementData);
+
+            if (canCreateDirect) {
+                showToast('Salida Registrada', `${quantity} ${productWithStock?.unidad_medida?.toLowerCase()} entregados`, 'success');
+            } else {
+                showToast('Solicitud Enviada', 'Solicitud de salida enviada para aprobación', 'info');
+            }
+
+            // Reset form
+            setProductId('');
+            setQuantity('');
+            setRequester('');
+            setNotes('');
+            setAvailableStock('');
+            setShowForm(false);
+
+            await loadData();
+        } catch (error) {
+            console.error("Error creating exit:", error);
+            showToast('Error', `No se pudo registrar la salida: ${error.message}`, 'error');
+        } finally {
+            setIsLoading(false);
         }
-
-        // Reset form
-        setProductId('');
-        setQuantity('');
-        setRequester('');
-        setNotes('');
-        setAvailableStock('');
-        setShowForm(false);
-        loadExits();
-        updateProductOptions();
     };
 
     const showExitDetails = (exit) => {
-        const product = Helpers.getProduct(exit.codigo_producto);
-        const creador = DB.getUserById(exit.id_solicitante);
+        // Hydrate details
+        const product = exit.producto; // Should be populated by DB join
+        const creador = exit.responsable; // Should be populated
+        const solicitanteName = exit.solicitante?.nombre_completo || 'Externo/Otro';
+        // Or extract from notes if we appended it?
 
         openModal(
             'Detalle de Salida',
@@ -177,7 +238,7 @@ export default function ExitsPage() {
                     </div>
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Origen</div>
-                        <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(exit.id_bodega_origen)}</div>
+                        <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{exit.bodega_origen?.nombre || (exit.id_bodega_origen === 1 ? 'Principal' : 'Instrumentacion')}</div>
                     </div>
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Generado por</div>
@@ -185,7 +246,7 @@ export default function ExitsPage() {
                     </div>
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Solicitante</div>
-                        <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>{exit.solicitante_nombre || 'Externo'}</div>
+                        <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>{solicitanteName}</div>
                     </div>
                 </div>
 
@@ -242,7 +303,7 @@ export default function ExitsPage() {
                             <select value={productId} onChange={handleProductChange} required>
                                 <option value="">Seleccionar producto...</option>
                                 {availableProducts.map(p => (
-                                    <option key={p.id} value={p.id}>
+                                    <option key={p.id || p.codigo_producto} value={p.codigo_producto}>
                                         {p.codigo_visible} - {p.nombre} ({p.stock} disponibles)
                                     </option>
                                 ))}
@@ -340,9 +401,9 @@ export default function ExitsPage() {
                             <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                                 Cancelar
                             </Button>
-                            <Button type="submit" variant="danger">
+                            <Button type="submit" variant="danger" disabled={isLoading}>
                                 <Icons.ArrowUp size={18} />
-                                Registrar Salida
+                                {isLoading ? 'Registrando...' : 'Registrar Salida'}
                             </Button>
                         </div>
                     </form>
@@ -368,8 +429,12 @@ export default function ExitsPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {exits.map(exit => {
-                            const product = Helpers.getProduct(exit.codigo_producto);
+                        {isLoading ? (
+                            <tr><td colSpan="7" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                        ) : exits.map(exit => {
+                            const product = exit.producto;
+                            const solicitanteName = exit.solicitante?.nombre_completo || 'Externo/Otro';
+
                             return (
                                 <tr key={exit.id_movimiento} onClick={() => showExitDetails(exit)} style={{ cursor: 'pointer' }}>
                                     <td>
@@ -387,8 +452,8 @@ export default function ExitsPage() {
                                         <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>-{exit.cantidad}</span>
                                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>{product?.unidad_medida?.toLowerCase()}</span>
                                     </td>
-                                    <td>{Helpers.getWarehouseName(exit.id_bodega_origen)}</td>
-                                    <td>{exit.solicitante_nombre || '-'}</td>
+                                    <td>{exit.bodega_origen?.nombre || (exit.id_bodega_origen === 1 ? 'Principal' : 'Instrumentacion')}</td>
+                                    <td>{solicitanteName}</td>
                                     <td>{Helpers.formatDateTime(exit.fechaHoraSolicitud)}</td>
                                     <td><StatusBadge status={exit.estado} /></td>
                                 </tr>
@@ -396,7 +461,7 @@ export default function ExitsPage() {
                         })}
                     </tbody>
                 </table>
-                {exits.length === 0 && (
+                {!isLoading && exits.length === 0 && (
                     <div className="table-empty">
                         <Icons.Truck size={48} />
                         <p>No hay salidas registradas</p>

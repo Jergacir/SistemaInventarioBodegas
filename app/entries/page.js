@@ -119,7 +119,8 @@ export default function EntriesPage() {
 
     const showEntryDetails = (entry) => {
         // Product might be populated in entry or found in list
-        const product = entry.producto || products.find(p => p.codigo_producto === entry.codigo_producto);
+        const productDetails = products.find(p => p.codigo_producto === entry.codigo_producto);
+        const product = productDetails || entry.producto;
         const creador = entry.solicitante;
 
         openModal(
@@ -281,7 +282,8 @@ export default function EntriesPage() {
                         {isLoading ? (
                             <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
                         ) : entries.map(entry => {
-                            const product = entry.producto || products.find(p => p.codigo_producto === entry.codigo_producto);
+                            const productDetails = products.find(p => p.codigo_producto === entry.codigo_producto);
+                            const product = productDetails || entry.producto;
                             const isPending = entry.estado === 'P';
                             const bodegaName = entry.bodega_destino?.nombre || (entry.id_bodega_destino === 1 ? 'Principal' : 'Instrumentacion');
 

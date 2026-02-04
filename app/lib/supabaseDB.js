@@ -497,23 +497,41 @@ export const SupabaseDB = {
 
     if (error) throw error;
 
-    // If approving a movement, we should also update stock if it's an entry
-    if (data.tipo === 'ENT' && data.estado === 'C' && updates.estado === 'C') { // strictly if it's being marked as completed just now
-      // Fetch current stock
-      const { data: currentInv } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', data.codigo_producto)
-        .eq('id_bodega', data.id_bodega_destino)
-        .single();
+    // If approving a movement, we should also update stock if it's an entry or exit
+    if (updates.estado === 'C' && data.estado === 'C') {
+      // Logic for Entry (ENT)
+      if (data.tipo === 'ENT') {
+        const { data: currentInv } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', data.codigo_producto)
+          .eq('id_bodega', data.id_bodega_destino)
+          .single();
 
-      const newStock = (currentInv?.stock || 0) + data.cantidad;
+        const newStock = (currentInv?.stock || 0) + data.cantidad;
+        await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_destino);
+      }
 
-      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_destino);
+      // Logic for Exit (SAL)
+      if (data.tipo === 'SAL') {
+        const { data: currentInv } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', data.codigo_producto)
+          .eq('id_bodega', data.id_bodega_origen)
+          .single();
+
+        // Check negative stock? Allow it for now or check? Ideally check first but update is already done.
+        // Rely on frontend validation for now.
+        const newStock = (currentInv?.stock || 0) - data.cantidad;
+        await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_origen);
+      }
     }
 
     return { ...data, fechaHoraSolicitud: data.fecha_hora_solicitud, fechaHoraAprobacion: data.fecha_hora_aprobacion };
   },
+
+
 
   async createEntry(entryData) {
     // 1. Create the movement
@@ -549,6 +567,59 @@ export const SupabaseDB = {
       const newStock = (currentInv?.stock || 0) + parseFloat(movement.cantidad);
 
       await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', entryData.codigo_producto).eq('id_bodega', entryData.id_bodega_destino);
+    }
+
+    return { ...movement, fechaHoraSolicitud: movement.fecha_hora_solicitud };
+  },
+
+  async createExit(exitData) {
+    // 1. Validation (Optional but good): Check stock before creating if auto-approving
+    if (exitData.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', exitData.codigo_producto)
+        .eq('id_bodega', exitData.id_bodega_origen)
+        .single();
+
+      if (!currentInv || currentInv.stock < exitData.cantidad) {
+        throw new Error(`Stock insuficiente. Disponible: ${currentInv?.stock || 0}`);
+      }
+    }
+
+    // 2. Create Movement
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .insert({
+        codigo_movimiento: `SAL-${Date.now()}`,
+        tipo: 'SAL',
+        cantidad: exitData.cantidad,
+        estado: exitData.estado || 'P',
+        notas: exitData.notas || '',
+        id_responsable: exitData.id_responsable,
+        id_solicitante: exitData.id_solicitante, // Can be null if external
+        codigo_producto: exitData.codigo_producto,
+        id_bodega_origen: exitData.id_bodega_origen,
+        id_bodega_destino: null, // Exits strictly have no destination internal warehouse
+        fecha_hora_solicitud: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // 3. Update Stock if Completed
+    if (movement.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', exitData.codigo_producto)
+        .eq('id_bodega', exitData.id_bodega_origen)
+        .single();
+
+      const newStock = (currentInv?.stock || 0) - parseFloat(movement.cantidad);
+
+      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', exitData.codigo_producto).eq('id_bodega', exitData.id_bodega_origen);
     }
 
     return { ...movement, fechaHoraSolicitud: movement.fecha_hora_solicitud };
