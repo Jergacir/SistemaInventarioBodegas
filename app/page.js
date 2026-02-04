@@ -97,7 +97,7 @@ export default function LoginPage() {
           />
         </div>
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <h1 className="login-title">Bienvenido</h1>
+          <h1 className="login-title">Bienvenido operadossr</h1>
           <p className="login-subtitle">Sistema de Gestión de Inventarios</p>
         </div>
 
