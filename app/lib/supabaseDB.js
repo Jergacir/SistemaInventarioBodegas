@@ -1,6 +1,7 @@
 import { supabase } from "./supabase/client";
 
 export const SupabaseDB = {
+  supabase,
   // ==================== USUARIOS ====================
   async getAllUsers() {
     try {

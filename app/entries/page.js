@@ -24,6 +24,23 @@ export default function EntriesPage() {
     const [unit, setUnit] = useState('');
 
     useEffect(() => {
+        // DEBUG: Check actual columns
+        const checkSchema = async () => {
+            const { data, error } = await DB.supabase
+                .from('movimiento')
+                .select('*')
+                .limit(1);
+
+            if (data && data.length > 0) {
+                const keys = Object.keys(data[0]);
+                console.log("ACTUAL DB COLUMNS:", keys);
+                // showToast("DEBUG COLUMNS", keys.join(", "), "info"); 
+            } else if (error) {
+                console.error("DEBUG SCHEMA ERROR:", error);
+            }
+        };
+        checkSchema();
+
         loadData();
     }, []);
 
