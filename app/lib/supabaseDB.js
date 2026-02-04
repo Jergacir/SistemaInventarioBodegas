@@ -292,6 +292,7 @@ export const SupabaseDB = {
     const idInstrum = await resolveLocationId(productData.ubicacion_instrumentacion);
 
     const payload = {
+      codigo_producto: productData.codigo_visible || productData.id,
       nombre: productData.nombre,
       unidad: productData.unidad_medida || productData.unidad,
       url_imagen: productData.imagen_url,
