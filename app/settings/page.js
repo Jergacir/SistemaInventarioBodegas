@@ -11,7 +11,7 @@ import {
   Icons,
 } from "../components/ui";
 import { useToast } from "../components/ui/Toast";
-import { DB } from "../lib/db";
+import { DB } from "../lib/database";
 
 export default function SettingsPage() {
   const { showToast } = useToast();
@@ -105,6 +105,9 @@ export default function SettingsPage() {
         stockThreshold: settings.stockThreshold,
       });
 
+      // Force UI update
+      window.dispatchEvent(new Event("app-settings-changed"));
+
       // Save Profile if changed and allowed
       if (canEditProfile && currentUser) {
         if (
@@ -119,7 +122,6 @@ export default function SettingsPage() {
           if (updatedUser) {
             setCurrentUser(updatedUser);
             sessionStorage.setItem("currentUser", JSON.stringify(updatedUser));
-            // Force sidebar update potentially via event
             window.dispatchEvent(new Event("storage"));
           }
         }
@@ -269,10 +271,10 @@ export default function SettingsPage() {
                     style={
                       !canEditProfile
                         ? {
-                            backgroundColor: "var(--bg-subtle)",
-                            cursor: "not-allowed",
-                            color: "var(--text-muted)",
-                          }
+                          backgroundColor: "var(--bg-subtle)",
+                          cursor: "not-allowed",
+                          color: "var(--text-muted)",
+                        }
                         : {}
                     }
                   />
@@ -290,10 +292,10 @@ export default function SettingsPage() {
                     style={
                       !canEditProfile
                         ? {
-                            backgroundColor: "var(--bg-subtle)",
-                            cursor: "not-allowed",
-                            color: "var(--text-muted)",
-                          }
+                          backgroundColor: "var(--bg-subtle)",
+                          cursor: "not-allowed",
+                          color: "var(--text-muted)",
+                        }
                         : {}
                     }
                   />

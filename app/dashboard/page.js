@@ -10,7 +10,7 @@ import {
   Icons,
 } from "../components/ui";
 import { MainLayout } from "../components/layout";
-import { DB } from "../lib/db";
+import { DB } from "../lib/database";
 import { Helpers } from "../lib/utils/helpers";
 import { getAccessDeniedMessage } from "../lib/permissions";
 import Link from "next/link";

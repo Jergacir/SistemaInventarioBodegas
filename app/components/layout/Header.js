@@ -35,7 +35,17 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
 
     // Poll every minute for updates
     const interval = setInterval(updateNotificationCount, 60000);
-    return () => clearInterval(interval);
+
+    // Listen for settings changes
+    const handleSettingsChange = () => updateNotificationCount();
+    window.addEventListener("app-settings-changed", handleSettingsChange);
+    window.addEventListener("storage", handleSettingsChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("app-settings-changed", handleSettingsChange);
+      window.removeEventListener("storage", handleSettingsChange);
+    };
   }, [user]);
 
   const handleLogout = async () => {
