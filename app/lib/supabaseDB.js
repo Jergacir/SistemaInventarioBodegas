@@ -547,11 +547,7 @@ export const SupabaseDB = {
 
     // Logic for Completed movements: Revert stock
     if (movement.estado === 'C') {
-      const { data: currentInv } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', movement.codigo_producto)
-        .single();
+
 
       if (movement.tipo === 'ENT') {
         // Entry added stock, so we subtract it
