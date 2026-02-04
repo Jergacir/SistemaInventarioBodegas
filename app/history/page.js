@@ -22,12 +22,8 @@ export default function HistoryPage() {
     const [movements, setMovements] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Set default dates on mount
+    // Set default dates on mount - REMOVED to show all history by default
     useEffect(() => {
-        const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        setDateStart(firstDayOfMonth.toISOString().split('T')[0]);
-        setDateEnd(today.toISOString().split('T')[0]);
         loadMovements();
     }, []);
 

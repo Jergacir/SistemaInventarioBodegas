@@ -805,6 +805,62 @@ export const SupabaseDB = {
     return data;
   },
 
+
+  // ==================== NOTIFICATIONS ====================
+  async getNotifications(userRole) {
+    const settings = this.getSettings();
+    const showLowStock = settings.lowStockAlert !== false;
+    const showTransfers = settings.transferAlert !== false;
+    const canApprove = userRole === "ADMIN" || userRole === "SUPERVISOR";
+
+    let pendingMovements = [];
+    let lowStock = [];
+
+    // 1. Get Pending Requests (If Admin/Supervisor)
+    if (showTransfers && canApprove) {
+      const { data: pending, error } = await supabase
+        .from("movimiento")
+        .select(`
+                *,
+                producto(nombre),
+                solicitante: usuario!id_solicitante(nombre_completo)
+            `)
+        .eq("estado", "P")
+        .order("fechahorasolicitud", { ascending: true }); // Oldest first for attention
+
+      if (!error && pending) {
+        // Hydrate slightly for UI compatibility
+        pendingMovements = pending.map(m => ({
+          ...m,
+          producto: m.producto || { nombre: 'Desconocido' }
+        }));
+      }
+    }
+
+    // 2. Get Low Stock (General alert)
+    if (showLowStock) {
+      // Complex query: products where total stock <= min stock
+      // We fetch all products with their inventory and filter in JS for now as total stock is computed
+      // Optimization: Create a DB View for low_stock_products in future
+      const products = await this.getAllProducts(); // This hydrates stock
+      const factor = (settings.stockThreshold || 100) / 100;
+
+      lowStock = products
+        .filter(p => p.stock_total <= (p.stock_minimo * factor))
+        .map(p => ({
+          product: p,
+          deficit: p.stock_minimo - p.stock_total
+        }))
+        .sort((a, b) => b.deficit - a.deficit);
+    }
+
+    return {
+      pendingMovements,
+      lowStock,
+      count: pendingMovements.length + lowStock.length
+    };
+  },
+
   // ==================== SETTINGS (localStorage) ====================
   getSettings() {
     if (typeof window === "undefined") return {};

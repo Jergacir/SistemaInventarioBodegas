@@ -11,34 +11,31 @@ import { Helpers } from "../../lib/utils/helpers";
 import { DB } from "../../lib/db";
 import { Auth } from "../../lib/auth";
 
+
 export const Header = ({ toggleSidebar, user, onLogout }) => {
   const router = useRouter();
   const { openModal, closeModal } = useModal();
   const { showToast } = useToast();
   const [notificationCount, setNotificationCount] = useState(0);
+  const [notifications, setNotifications] = useState({ pendingMovements: [], lowStock: [] });
 
   useEffect(() => {
-    const updateNotificationCount = () => {
+    const updateNotificationCount = async () => {
       if (!user) return;
-
-      const settings = DB.getSettings();
-      const showLowStock = settings.lowStockAlert !== false; // Default true if undefined
-      const showTransfers = settings.transferAlert !== false;
-
-      const lowStockCount = showLowStock
-        ? Helpers.getLowStockProducts?.()?.length || 0
-        : 0;
-      const pendingTransfers = showTransfers
-        ? DB.getAllMovements().filter((m) => m.estado === "P").length
-        : 0;
-      const canApprove = user?.rol === "ADMIN" || user?.rol === "SUPERVISOR";
-
-      const total = canApprove
-        ? lowStockCount + pendingTransfers
-        : lowStockCount;
-      setNotificationCount(total);
+      try {
+        const data = await DB.getNotifications(user.rol);
+        setNotifications(data);
+        setNotificationCount(data.count);
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+      }
     };
+
     updateNotificationCount();
+
+    // Poll every minute for updates
+    const interval = setInterval(updateNotificationCount, 60000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const handleLogout = async () => {
@@ -160,18 +157,12 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
   };
 
   const showNotificationsModal = () => {
-    const settings = DB.getSettings();
-    const showLowStock = settings.lowStockAlert !== false;
-    const showTransfers = settings.transferAlert !== false;
-
-    const lowStock = showLowStock ? Helpers.getLowStockProducts?.() || [] : [];
-    const pendingMovements = showTransfers
-      ? DB.getAllMovements().filter((m) => m.estado === "P")
-      : [];
+    const { pendingMovements, lowStock } = notifications;
     const canApprove = user?.rol === "ADMIN" || user?.rol === "SUPERVISOR";
+    // pendingMovements is already filtered by role in DB.getNotifications but good to double check or just use data
 
-    const hasNotifications =
-      lowStock.length > 0 || (pendingMovements.length > 0 && canApprove);
+    // DB.getNotifications already handles role check for pending movements availability
+    const hasNotifications = lowStock.length > 0 || pendingMovements.length > 0;
 
     openModal({
       title: "Notificaciones",
@@ -220,7 +211,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
               style={{ display: "flex", flexDirection: "column", gap: "20px" }}
             >
               {/* Pending Movements */}
-              {pendingMovements.length > 0 && canApprove && (
+              {pendingMovements.length > 0 && (
                 <div
                   style={{
                     background: "var(--bg-subtle)",
@@ -277,7 +268,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                   </div>
                   <div style={{ padding: "8px" }}>
                     {pendingMovements.slice(0, 5).map((mov) => {
-                      const product = Helpers.getProduct(mov.codigo_producto);
+                      const product = mov.producto; // fetched via join
                       const typeLabels = {
                         ENT: "Entrada",
                         SAL: "Salida",
@@ -286,9 +277,8 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
 
                       const handleItemClick = () => {
                         closeModal();
-                        if (mov.tipo === "ENT") router.push("/entries");
-                        else if (mov.tipo === "SAL") router.push("/exits");
-                        else router.push("/transfers");
+                        // Admin/Supervisor goes to Requests to approve
+                        router.push("/requests");
                       };
 
                       return (
@@ -308,12 +298,12 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                             transition: "background-color 0.2s",
                           }}
                           onMouseEnter={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "var(--bg-hover)")
+                          (e.currentTarget.style.backgroundColor =
+                            "var(--bg-hover)")
                           }
                           onMouseLeave={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "var(--bg-card)")
+                          (e.currentTarget.style.backgroundColor =
+                            "var(--bg-card)")
                           }
                         >
                           <Badge
@@ -325,7 +315,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                                   : "pending"
                             }
                           >
-                            {typeLabels[mov.tipo]}
+                            {typeLabels[mov.tipo] || mov.tipo}
                           </Badge>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div
@@ -345,7 +335,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                                 color: "var(--text-muted)",
                               }}
                             >
-                              Cant: <strong>{mov.cantidad}</strong>
+                              Cant: <strong>{mov.cantidad}</strong> • Solic: {mov.solicitante?.nombre_completo || 'N/A'}
                             </div>
                           </div>
                           <Icons.ChevronRight
@@ -438,7 +428,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                   <div style={{ padding: "8px" }}>
                     {lowStock.slice(0, 5).map((item) => {
                       const p = item.product;
-                      const totalStock = Helpers.getTotalStock(p.id);
+                      // stock_total is already in p from getAllProducts hydration
 
                       const handleItemClick = () => {
                         closeModal();
@@ -447,7 +437,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
 
                       return (
                         <div
-                          key={p.id}
+                          key={p.codigo_producto}
                           onClick={handleItemClick}
                           style={{
                             padding: "10px 12px",
@@ -462,12 +452,12 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                             transition: "background-color 0.2s",
                           }}
                           onMouseEnter={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "var(--bg-hover)")
+                          (e.currentTarget.style.backgroundColor =
+                            "var(--bg-hover)")
                           }
                           onMouseLeave={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "var(--bg-card)")
+                          (e.currentTarget.style.backgroundColor =
+                            "var(--bg-card)")
                           }
                         >
                           <div style={{ flex: 1, marginRight: "10px" }}>
@@ -485,7 +475,7 @@ export const Header = ({ toggleSidebar, user, onLogout }) => {
                               fontWeight: 600,
                             }}
                           >
-                            {totalStock} unid.
+                            {p.stock_total} unid.
                           </div>
                           <Icons.ChevronRight
                             size={16}
