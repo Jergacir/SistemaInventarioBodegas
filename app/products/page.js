@@ -13,7 +13,13 @@ export default function ProductsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('');
     const [stockFilter, setStockFilter] = useState('');
+
+    // Data states
     const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [brands, setBrands] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
     const { openModal, closeModal } = useModal();
     const { showToast } = useToast();
 
@@ -22,15 +28,36 @@ export default function ProductsPage() {
     useEffect(() => {
         const user = JSON.parse(sessionStorage.getItem('currentUser') || '{}');
         setCurrentUser(user);
-        loadProducts();
+        loadAllData();
     }, []);
 
-    const loadProducts = () => {
-        setProducts(DB.getAllProducts());
+    const loadAllData = async () => {
+        setIsLoading(true);
+        try {
+            const [fetchedProducts, fetchedCategories, fetchedBrands] = await Promise.all([
+                DB.getAllProducts(),
+                DB.getAllCategories(),
+                DB.getAllBrands()
+            ]);
+            setProducts(fetchedProducts || []);
+            setCategories(fetchedCategories || []);
+            setBrands(fetchedBrands || []);
+        } catch (error) {
+            console.error("Error loading data:", error);
+            showToast("Error", "Error al cargar los datos", "error");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const categories = DB.getAllCategories();
-    const brands = DB.getAllBrands();
+    const loadProducts = async () => {
+        try {
+            const fetchedProducts = await DB.getAllProducts();
+            setProducts(fetchedProducts || []);
+        } catch (error) {
+            console.error("Error loading products:", error);
+        }
+    };
 
     const canManage = currentUser && ['ADMIN', 'SUPERVISOR'].includes(currentUser.rol);
 
@@ -43,18 +70,16 @@ export default function ProductsPage() {
 
         let matchesStock = true;
         if (stockFilter === 'low') {
-            const totalStock = Helpers.getTotalStock(p.id);
-            matchesStock = totalStock <= p.stock_minimo;
+            matchesStock = p.stock_total <= p.stock_minimo;
         } else if (stockFilter === 'normal') {
-            const totalStock = Helpers.getTotalStock(p.id);
-            matchesStock = totalStock > p.stock_minimo;
+            matchesStock = p.stock_total > p.stock_minimo;
         }
 
         return matchesSearch && matchesCategory && matchesStock;
     });
 
     const openProductModal = (productId = null, readOnly = false) => {
-        const product = productId ? Helpers.getProduct(productId) : null;
+        const product = productId ? products.find(p => p.id === productId) : null;
         const isEdit = !!product;
 
         if (readOnly) {
@@ -65,9 +90,9 @@ export default function ProductsPage() {
     };
 
     const showReadOnlyModal = (product) => {
-        const totalStock = Helpers.getTotalStock(product.id);
-        const stockPrincipal = Helpers.getInventory(product.id, 1)?.stock || 0;
-        const stockInstrum = Helpers.getInventory(product.id, 2)?.stock || 0;
+        const totalStock = product.stock_total || 0;
+        const stockPrincipal = product.stock_principal || 0;
+        const stockInstrum = product.stock_instrumentacion || 0;
         const isLow = totalStock <= product.stock_minimo;
 
         openModal(
@@ -181,35 +206,57 @@ export default function ProductsPage() {
         );
     };
 
-    const saveProduct = (productId, data) => {
+    const saveProduct = async (productId, data) => {
         if (!data.codigo_visible || !data.nombre || !data.categoria || !data.unidad_medida) {
             showToast('Error', 'Por favor completa todos los campos requeridos', 'error');
             return;
         }
 
         try {
-            DB.saveProduct({ id: productId, ...data });
+            await DB.saveProduct({ id: productId, ...data });
             showToast(
                 productId ? 'Producto Actualizado' : 'Producto Creado',
                 `${data.nombre} ha sido guardado correctamente`,
                 'success'
             );
             closeModal();
-            loadProducts();
+            loadProducts(); // Reload only products
+
+            // Reload categories/brands if new ones might have been created
+            // Optimization: Only do this if we suspect new ones, or just strict reload
+            if (data.categoria && !categories.includes(data.categoria)) {
+                const newCats = await DB.getAllCategories();
+                setCategories(newCats);
+            }
+            if (data.marca && !brands.includes(data.marca)) {
+                const newBrands = await DB.getAllBrands();
+                setBrands(newBrands);
+            }
+
         } catch (error) {
+            console.error("Error saving product:", error);
             showToast('Error', 'No se pudo guardar el producto', 'error');
         }
     };
 
-    const deleteProduct = (productId) => {
-        const product = Helpers.getProduct(productId);
+    const deleteProduct = async (productId) => {
+        const product = Helpers.getProduct(productId) || products.find(p => p.id === productId); // Fallback to state if Helper not updated
+        // Note: Helpers.getProduct is sync and uses MockData directly usually. 
+        // If we are fully Supabase, Helpers might be broken if it imports MockData.
+        // But for now, let's rely on finding it in our 'products' state which is hydrated.
+
         if (!product) return;
 
         if (confirm(`¿Estás seguro de eliminar "${product.nombre}"? Esta acción no se puede deshacer.`)) {
-            DB.deleteProduct(productId);
-            showToast('Producto Eliminado', `${product.nombre} ha sido eliminado`, 'success');
-            closeModal();
-            loadProducts();
+            try {
+                await DB.deleteProduct(productId);
+                showToast('Producto Eliminado', `${product.nombre} ha sido eliminado`, 'success');
+                closeModal();
+                loadProducts();
+            } catch (error) {
+                console.error("Error deleting product:", error);
+                showToast('Error', 'No se pudo eliminar el producto', 'error');
+            }
         }
     };
 
@@ -270,10 +317,14 @@ export default function ProductsPage() {
 
             {/* Products Grid */}
             <div className="products-grid">
-                {filteredProducts.map(product => {
-                    const totalStock = Helpers.getTotalStock(product.id);
-                    const stockPrincipal = Helpers.getInventory(product.id, 1)?.stock || 0;
-                    const stockInstrum = Helpers.getInventory(product.id, 2)?.stock || 0;
+                {isLoading ? (
+                    <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px' }}>
+                        Cargando productos...
+                    </div>
+                ) : filteredProducts.map(product => {
+                    const totalStock = product.stock_total || 0;
+                    const stockPrincipal = product.stock_principal || 0;
+                    const stockInstrum = product.stock_instrumentacion || 0;
                     const isLow = totalStock <= product.stock_minimo;
 
                     return (

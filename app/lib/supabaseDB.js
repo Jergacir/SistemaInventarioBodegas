@@ -140,6 +140,7 @@ export const SupabaseDB = {
                 *,
                 MARCA(nombre),
                 CATEGORIA(nombre_categoria),
+                INVENTARIO(id_bodega, stock),
                 ubicacion_princip:UBICACION!id_ubicacion_princip(*),
                 ubicacion_instrum:UBICACION!id_ubicacion_instrum(*)
             `,
@@ -161,6 +162,7 @@ export const SupabaseDB = {
                 *,
                 MARCA(nombre),
                 CATEGORIA(nombre_categoria),
+                INVENTARIO(id_bodega, stock),
                 ubicacion_princip:UBICACION!id_ubicacion_princip(*),
                 ubicacion_instrum:UBICACION!id_ubicacion_instrum(*)
             `,
@@ -174,6 +176,20 @@ export const SupabaseDB = {
 
   hydrateProduct(product) {
     if (!product) return null;
+
+    // Calculate stock from INVENTARIO array if present
+    let stock_principal = 0;
+    let stock_instrumentacion = 0;
+
+    if (product.INVENTARIO && Array.isArray(product.INVENTARIO)) {
+      product.INVENTARIO.forEach(inv => {
+        if (inv.id_bodega === 1) stock_principal = inv.stock;
+        if (inv.id_bodega === 2) stock_instrumentacion = inv.stock;
+      });
+    }
+
+    const stock_total = stock_principal + stock_instrumentacion;
+
     return {
       ...product,
       id: product.codigo_producto,
@@ -184,6 +200,12 @@ export const SupabaseDB = {
       marca: product.MARCA?.nombre || "Desconocida",
       unidad_medida: product.unidad,
       imagen_url: product.url_imagen,
+
+      // Stock properties
+      stock_total,
+      stock_principal,
+      stock_instrumentacion,
+
       ubicacion_principal: product.ubicacion_princip
         ? `${product.ubicacion_princip.tipo}-${product.ubicacion_princip.numero}-${product.ubicacion_princip.nivel}`
         : "N/A",
@@ -457,12 +479,12 @@ export const SupabaseDB = {
   async getAllCategories() {
     const { data, error } = await supabase
       .from("categoria")
-      .select("*")
+      .select("nombre_categoria")
       .eq("activo", true)
       .order("nombre_categoria");
 
     if (error) throw error;
-    return data;
+    return data.map((c) => c.nombre_categoria);
   },
 
   async createCategory(nombre) {
@@ -480,12 +502,12 @@ export const SupabaseDB = {
   async getAllBrands() {
     const { data, error } = await supabase
       .from("marca")
-      .select("*")
+      .select("nombre")
       .eq("activo", true)
       .order("nombre");
 
     if (error) throw error;
-    return data;
+    return data.map((m) => m.nombre);
   },
 
   async createBrand(nombre) {
