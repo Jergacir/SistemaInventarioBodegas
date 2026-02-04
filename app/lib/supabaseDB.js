@@ -535,11 +535,31 @@ export const SupabaseDB = {
 
 
   async createEntry(entryData) {
-    // 1. Create the movement
+    // Generate sequential ID
+    // 1. Get last entry
+    const { data: lastMovements } = await supabase
+      .from("movimiento")
+      .select("codigo_movimiento")
+      .eq("tipo", "ENT")
+      .order("id_movimiento", { ascending: false })
+      .limit(1);
+
+    let nextSequence = 1;
+    if (lastMovements && lastMovements.length > 0) {
+      const lastCode = lastMovements[0].codigo_movimiento;
+      const parts = lastCode.split('-');
+      if (parts.length === 2 && !isNaN(parts[1])) {
+        nextSequence = parseInt(parts[1]) + 1;
+      }
+    }
+
+    const newCode = `ENT-${String(nextSequence).padStart(5, '0')}`;
+
+    // 2. Create the movement
     const { data: movement, error } = await supabase
       .from("movimiento")
       .insert({
-        codigo_movimiento: `ENT-${Date.now()}`, // Temporary gen
+        codigo_movimiento: newCode,
         tipo: 'ENT',
         cantidad: entryData.cantidad,
         estado: entryData.estado || 'P',
@@ -588,11 +608,30 @@ export const SupabaseDB = {
       }
     }
 
+    // Generate sequential ID
+    const { data: lastMovements } = await supabase
+      .from("movimiento")
+      .select("codigo_movimiento")
+      .eq("tipo", "SAL")
+      .order("id_movimiento", { ascending: false })
+      .limit(1);
+
+    let nextSequence = 1;
+    if (lastMovements && lastMovements.length > 0) {
+      const lastCode = lastMovements[0].codigo_movimiento;
+      const parts = lastCode.split('-');
+      if (parts.length === 2 && !isNaN(parts[1])) {
+        nextSequence = parseInt(parts[1]) + 1;
+      }
+    }
+
+    const newCode = `SAL-${String(nextSequence).padStart(5, '0')}`;
+
     // 2. Create Movement
     const { data: movement, error } = await supabase
       .from("movimiento")
       .insert({
-        codigo_movimiento: `SAL-${Date.now()}`,
+        codigo_movimiento: newCode,
         tipo: 'SAL',
         cantidad: exitData.cantidad,
         estado: exitData.estado || 'P',

@@ -69,7 +69,7 @@ export default function EntriesPage() {
     const handleProductChange = (e) => {
         const id = e.target.value;
         setProductId(id);
-        const product = products.find(p => p.id === id || p.codigo_producto === id);
+        const product = products.find(p => String(p.id) === String(id) || String(p.codigo_producto) === String(id));
         if (product) {
             setUnit(product.unidad_medida || '');
         } else {
