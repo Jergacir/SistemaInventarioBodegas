@@ -43,7 +43,7 @@ export default function EntriesPage() {
             setProducts(fetchedProducts || []);
         } catch (error) {
             console.error("Error loading entries data:", error);
-            showToast('Error', 'No se pudieron cargar los datos', 'error');
+            showToast('Error', `No se pudieron cargar los datos: ${error.message || error.error_description || JSON.stringify(error)}`, 'error');
         } finally {
             setIsLoading(false);
         }
