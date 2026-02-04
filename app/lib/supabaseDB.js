@@ -422,15 +422,15 @@ export const SupabaseDB = {
               bodega_destino: bodega!id_bodega_destino(nombre)
         `,
       )
-      .order("fecha_hora_solicitud", { ascending: false });
+      .order("fechahorasolicitud", { ascending: false });
 
     if (error) throw error;
 
     // Map snake_case DB columns to camelCase for UI compatibility
     return data.map(m => ({
       ...m,
-      fechaHoraSolicitud: m.fecha_hora_solicitud,
-      fechaHoraAprobacion: m.fecha_hora_aprobacion
+      fechaHoraSolicitud: m.fechahorasolicitud,
+      fechaHoraAprobacion: m.fechahoraaprobacion
     }));
   },
 
@@ -452,8 +452,8 @@ export const SupabaseDB = {
 
     if (error) throw error;
     if (data) {
-      data.fechaHoraSolicitud = data.fecha_hora_solicitud;
-      data.fechaHoraAprobacion = data.fecha_hora_aprobacion;
+      data.fechaHoraSolicitud = data.fechahorasolicitud;
+      data.fechaHoraAprobacion = data.fechahoraaprobacion;
     }
     return data;
   },
@@ -472,20 +472,20 @@ export const SupabaseDB = {
         codigo_producto: movementData.codigo_producto,
         id_bodega_origen: movementData.id_bodega_origen,
         id_bodega_destino: movementData.id_bodega_destino,
-        fecha_hora_solicitud: new Date().toISOString()
+        fechahorasolicitud: new Date().toISOString()
       })
       .select()
       .single();
 
     if (error) throw error;
-    return { ...data, fechaHoraSolicitud: data.fecha_hora_solicitud };
+    return { ...data, fechaHoraSolicitud: data.fechahorasolicitud };
   },
 
   async updateMovement(id, movementData) {
     const updates = { ...movementData };
 
     if (movementData.estado === "C") {
-      updates.fecha_hora_aprobacion = new Date().toISOString();
+      updates.fechahoraaprobacion = new Date().toISOString();
       delete updates.fechaHoraAprobacion; // Remove camelCase if present
     }
 
@@ -529,7 +529,7 @@ export const SupabaseDB = {
       }
     }
 
-    return { ...data, fechaHoraSolicitud: data.fecha_hora_solicitud, fechaHoraAprobacion: data.fecha_hora_aprobacion };
+    return { ...data, fechaHoraSolicitud: data.fechahorasolicitud, fechaHoraAprobacion: data.fechahoraaprobacion };
   },
 
 
@@ -549,7 +549,7 @@ export const SupabaseDB = {
         codigo_producto: entryData.codigo_producto,
         id_bodega_origen: null, // Entries strictly have no origin internal warehouse
         id_bodega_destino: entryData.id_bodega_destino,
-        fecha_hora_solicitud: new Date().toISOString()
+        fechahorasolicitud: new Date().toISOString()
       })
       .select()
       .single();
@@ -570,7 +570,7 @@ export const SupabaseDB = {
       await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', entryData.codigo_producto).eq('id_bodega', entryData.id_bodega_destino);
     }
 
-    return { ...movement, fechaHoraSolicitud: movement.fecha_hora_solicitud };
+    return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
   },
 
   async createExit(exitData) {
@@ -602,7 +602,7 @@ export const SupabaseDB = {
         codigo_producto: exitData.codigo_producto,
         id_bodega_origen: exitData.id_bodega_origen,
         id_bodega_destino: null, // Exits strictly have no destination internal warehouse
-        fecha_hora_solicitud: new Date().toISOString()
+        fechahorasolicitud: new Date().toISOString()
       })
       .select()
       .single();
@@ -623,7 +623,7 @@ export const SupabaseDB = {
       await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', exitData.codigo_producto).eq('id_bodega', exitData.id_bodega_origen);
     }
 
-    return { ...movement, fechaHoraSolicitud: movement.fecha_hora_solicitud };
+    return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
   },
 
   // ==================== CATEGORÍAS ====================
