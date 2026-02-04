@@ -5,7 +5,7 @@ import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
 import { MockData } from '../lib/mockData';
 
