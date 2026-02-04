@@ -11,7 +11,7 @@ import {
   Icons,
 } from "../components/ui";
 import { useToast } from "../components/ui/Toast";
-import { DB } from "../lib/database";
+import { DB } from "../lib/db";
 
 export default function SettingsPage() {
   const { showToast } = useToast();
@@ -94,7 +94,7 @@ export default function SettingsPage() {
     setPasswordData((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = () => {
     try {
       // Save System Settings
       const currentSettings = DB.getSettings();
@@ -105,17 +105,13 @@ export default function SettingsPage() {
         stockThreshold: settings.stockThreshold,
       });
 
-      // Force UI update
-      window.dispatchEvent(new Event("app-settings-changed"));
-
       // Save Profile if changed and allowed
       if (canEditProfile && currentUser) {
         if (
           profileData.email !== currentUser.email ||
           profileData.nombre !== currentUser.nombre
         ) {
-          const userId = currentUser.id_usuario || currentUser.id;
-          const updatedUser = await DB.updateUser(userId, {
+          const updatedUser = DB.updateUser(currentUser.id, {
             nombre_completo: profileData.nombre,
             email: profileData.email,
           });
@@ -123,6 +119,7 @@ export default function SettingsPage() {
           if (updatedUser) {
             setCurrentUser(updatedUser);
             sessionStorage.setItem("currentUser", JSON.stringify(updatedUser));
+            // Force sidebar update potentially via event
             window.dispatchEvent(new Event("storage"));
           }
         }
