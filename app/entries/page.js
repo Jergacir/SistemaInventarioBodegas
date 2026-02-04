@@ -92,7 +92,7 @@ export default function EntriesPage() {
             return;
         }
 
-        const product = products.find(p => p.id === productId || p.codigo_producto === productId);
+        const product = products.find(p => String(p.id) === String(productId) || String(p.codigo_producto) === String(productId));
         const currentUser = getCurrentUser();
         // Assuming roles are simple strings. Adjust if object.
         const canCreateDirect = currentUser.rol === 'ADMIN' || currentUser.rol === 'SUPERVISOR';
