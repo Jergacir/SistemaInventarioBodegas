@@ -235,7 +235,7 @@ export default function ProductsPage() {
 
         } catch (error) {
             console.error("Error saving product:", error);
-            showToast('Error', 'No se pudo guardar el producto', 'error');
+            showToast('Error', `No se pudo guardar: ${error.message || error.details || 'Error desconoc'}`, 'error');
         }
     };
 
@@ -255,7 +255,7 @@ export default function ProductsPage() {
                 loadProducts();
             } catch (error) {
                 console.error("Error deleting product:", error);
-                showToast('Error', 'No se pudo eliminar el producto', 'error');
+                showToast('Error', `No se pudo eliminar: ${error.message || 'Error desconocido'}`, 'error');
             }
         }
     };
