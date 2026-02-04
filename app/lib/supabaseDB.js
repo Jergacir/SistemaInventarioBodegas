@@ -134,15 +134,15 @@ export const SupabaseDB = {
   // ==================== PRODUCTOS ====================
   async getAllProducts() {
     const { data, error } = await supabase
-      .from("PRODUCTO")
+      .from("producto")
       .select(
         `
                 *,
-                MARCA(nombre),
-                CATEGORIA(nombre_categoria),
-                INVENTARIO(id_bodega, stock),
-                ubicacion_princip:UBICACION!id_ubicacion_princip(*),
-                ubicacion_instrum:UBICACION!id_ubicacion_instrum(*)
+                marca(nombre),
+                categoria(nombre_categoria),
+                inventario(id_bodega, stock),
+                ubicacion_princip:ubicacion!id_ubicacion_princip(*),
+                ubicacion_instrum:ubicacion!id_ubicacion_instrum(*)
             `,
       )
       .order("nombre");
@@ -156,15 +156,15 @@ export const SupabaseDB = {
 
   async getProductById(id) {
     const { data, error } = await supabase
-      .from("PRODUCTO")
+      .from("producto")
       .select(
         `
                 *,
-                MARCA(nombre),
-                CATEGORIA(nombre_categoria),
-                INVENTARIO(id_bodega, stock),
-                ubicacion_princip:UBICACION!id_ubicacion_princip(*),
-                ubicacion_instrum:UBICACION!id_ubicacion_instrum(*)
+                marca(nombre),
+                categoria(nombre_categoria),
+                inventario(id_bodega, stock),
+                ubicacion_princip:ubicacion!id_ubicacion_princip(*),
+                ubicacion_instrum:ubicacion!id_ubicacion_instrum(*)
             `,
       )
       .eq("codigo_producto", id)
@@ -181,8 +181,8 @@ export const SupabaseDB = {
     let stock_principal = 0;
     let stock_instrumentacion = 0;
 
-    if (product.INVENTARIO && Array.isArray(product.INVENTARIO)) {
-      product.INVENTARIO.forEach(inv => {
+    if (product.inventario && Array.isArray(product.inventario)) {
+      product.inventario.forEach(inv => {
         if (inv.id_bodega === 1) stock_principal = inv.stock;
         if (inv.id_bodega === 2) stock_instrumentacion = inv.stock;
       });
@@ -194,10 +194,10 @@ export const SupabaseDB = {
       ...product,
       id: product.codigo_producto,
       codigo_visible: product.codigo_producto,
-      nombre_marca: product.MARCA?.nombre || "Desconocida",
-      nombre_categoria: product.CATEGORIA?.nombre_categoria || "Desconocida",
-      categoria: product.CATEGORIA?.nombre_categoria || "Desconocida",
-      marca: product.MARCA?.nombre || "Desconocida",
+      nombre_marca: product.marca?.nombre || "Desconocida",
+      nombre_categoria: product.categoria?.nombre_categoria || "Desconocida",
+      categoria: product.categoria?.nombre_categoria || "Desconocida",
+      marca: product.marca?.nombre || "Desconocida",
       unidad_medida: product.unidad,
       imagen_url: product.url_imagen,
 
