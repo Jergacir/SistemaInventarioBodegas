@@ -220,7 +220,7 @@ export const SupabaseDB = {
     let categoryId = productData.id_categoria;
     if (!categoryId && productData.categoria) {
       const { data: cat } = await supabase
-        .from("CATEGORIA")
+        .from("categoria")
         .select("id_categoria")
         .eq("nombre_categoria", productData.categoria)
         .single();
@@ -229,7 +229,7 @@ export const SupabaseDB = {
         categoryId = cat.id_categoria;
       } else {
         const { data: newCat, error: catError } = await supabase
-          .from("CATEGORIA")
+          .from("categoria")
           .insert({ nombre_categoria: productData.categoria, activo: true })
           .select()
           .single();
@@ -242,7 +242,7 @@ export const SupabaseDB = {
     let brandId = productData.id_marca;
     if (!brandId && productData.marca) {
       const { data: brand } = await supabase
-        .from("MARCA")
+        .from("marca")
         .select("id_marca")
         .eq("nombre", productData.marca)
         .single();
@@ -250,7 +250,7 @@ export const SupabaseDB = {
         brandId = brand.id_marca;
       } else {
         const { data: newBrand, error: brandError } = await supabase
-          .from("MARCA")
+          .from("marca")
           .insert({ nombre: productData.marca, activo: true })
           .select()
           .single();
@@ -266,7 +266,7 @@ export const SupabaseDB = {
       if (!tipo || !numero || !nivel) return null;
 
       const { data: loc } = await supabase
-        .from("UBICACION")
+        .from("ubicacion")
         .select("id_ubicacion")
         .eq("tipo", tipo)
         .eq("numero", parseInt(numero))
@@ -276,7 +276,7 @@ export const SupabaseDB = {
       if (loc) return loc.id_ubicacion;
 
       const { data: newLoc, error: locError } = await supabase
-        .from("UBICACION")
+        .from("ubicacion")
         .insert({ tipo, numero: parseInt(numero), nivel })
         .select()
         .single();
@@ -306,7 +306,7 @@ export const SupabaseDB = {
     let result;
     if (productData.id && !productData.isNew) { // isNew flag might be passed by UI if it's a new entry despite having an ID (unlikely but safe)
       const { data, error } = await supabase
-        .from("PRODUCTO")
+        .from("producto")
         .update(payload)
         .eq("codigo_producto", productData.id)
         .select()
@@ -315,14 +315,14 @@ export const SupabaseDB = {
       result = data;
     } else {
       const { data, error } = await supabase
-        .from("PRODUCTO")
+        .from("producto")
         .insert(payload)
         .select()
         .single();
       if (error) throw error;
 
       // Init inventory
-      await supabase.from("INVENTARIO").insert([
+      await supabase.from("inventario").insert([
         { codigo_producto: data.codigo_producto, id_bodega: 1, stock: 0, estado: 'S' },
         { codigo_producto: data.codigo_producto, id_bodega: 2, stock: 0, estado: 'S' }
       ]);
@@ -333,11 +333,11 @@ export const SupabaseDB = {
 
   async deleteProduct(id) {
     // Delete dependencies first
-    await supabase.from("INVENTARIO").delete().eq("codigo_producto", id);
+    await supabase.from("inventario").delete().eq("codigo_producto", id);
     // Note: MOVIMIENTO also references PRODUCTO. If strict FK, this fails. 
     // Ideally we checked for movements before deleting.
     const { error } = await supabase
-      .from("PRODUCTO")
+      .from("producto")
       .delete()
       .eq("codigo_producto", id);
     if (error) throw error;
