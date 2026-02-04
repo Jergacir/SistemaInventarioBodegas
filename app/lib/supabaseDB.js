@@ -124,6 +124,7 @@ export const SupabaseDB = {
     if (!user) return null;
     const roleMap = { A: "ADMIN", S: "SUPERVISOR", O: "OPERADOR" };
     return {
+      id: user.id_usuario,
       id_usuario: user.id_usuario,
       nombre_completo: user.nombre_completo,
       rol: roleMap[user.rol] || user.rol,

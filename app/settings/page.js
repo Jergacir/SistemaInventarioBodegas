@@ -94,7 +94,7 @@ export default function SettingsPage() {
     setPasswordData((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     try {
       // Save System Settings
       const currentSettings = DB.getSettings();
@@ -114,7 +114,8 @@ export default function SettingsPage() {
           profileData.email !== currentUser.email ||
           profileData.nombre !== currentUser.nombre
         ) {
-          const updatedUser = DB.updateUser(currentUser.id, {
+          const userId = currentUser.id_usuario || currentUser.id;
+          const updatedUser = await DB.updateUser(userId, {
             nombre_completo: profileData.nombre,
             email: profileData.email,
           });
