@@ -350,14 +350,25 @@ export const SupabaseDB = {
       .select(
         `
               *,
-              producto(*),
+              producto (
+                *,
+                marca(nombre),
+                categoria(nombre_categoria),
+                ubicacion_princip:ubicacion!id_ubicacion_princip(*),
+                ubicacion_instrum:ubicacion!id_ubicacion_instrum(*)
+              ),
               bodega(*)
-                `,
+        `,
       )
       .order("codigo_producto");
 
     if (error) throw error;
-    return data;
+
+    // Flatten logic for easier consumption in frontend
+    return data.map(item => ({
+      ...item,
+      producto: this.hydrateProduct(item.producto)
+    }));
   },
 
   async getInventoryByProduct(codigo_producto) {

@@ -4,65 +4,90 @@ import React, { useState, useEffect } from 'react';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
-import { MockData } from '../lib/mockData';
 
 export default function InventoryPage() {
     const [selectedWarehouse, setSelectedWarehouse] = useState(1); // 1 = Principal, 2 = Instrumentacion
     const [searchTerm, setSearchTerm] = useState('');
     const { openModal, closeModal } = useModal();
 
-    const warehouses = MockData.BODEGA.filter(b => b.id_bodega !== 3); // Exclude virtual warehouse
+    // Data states
+    const [inventoryData, setInventoryData] = useState([]);
+    const [warehouses, setWarehouses] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Get inventory data for selected warehouse
-    const getInventoryData = () => {
-        return DB.getAllInventory()
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [fetchedInventory, fetchedWarehouses] = await Promise.all([
+                DB.getInventory(),
+                DB.getAllWarehouses()
+            ]);
+            setInventoryData(fetchedInventory || []);
+            setWarehouses(fetchedWarehouses || []);
+        } catch (error) {
+            console.error("Error loading inventory:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Filter inventory based on selection
+    const getFilteredInventory = () => {
+        return inventoryData
             .filter(i => i.id_bodega === selectedWarehouse)
             .map(inv => {
-                const product = Helpers.getProduct(inv.codigo_producto);
+                const product = inv.producto || {};
                 return {
                     ...inv,
                     product_id: inv.codigo_producto,
-                    product_code: product?.codigo_visible || '',
-                    product_name: product?.nombre || '',
-                    category: product?.categoria || '',
-                    unit: product?.unidad_medida || '',
-                    min_stock: product?.stock_minimo || 0,
-                    location: selectedWarehouse === 1 ? product?.ubicacion_principal : product?.ubicacion_instrumentacion,
-                    brand: product?.marca || 'Generico',
-                    imagen_url: product?.imagen_url,
-                    is_low: inv.stock <= (product?.stock_minimo || 0)
+                    product_code: product.codigo_visible || '',
+                    product_name: product.nombre || '',
+                    category: product.categoria || '',
+                    unit: product.unidad_medida || '',
+                    min_stock: product.stock_minimo || 0,
+                    location: selectedWarehouse === 1 ? product.ubicacion_principal : product.ubicacion_instrumentacion,
+                    brand: product.marca || 'Generico',
+                    imagen_url: product.imagen_url,
+                    is_low: inv.stock <= (product.stock_minimo || 0)
                 };
+            })
+            .filter(item => {
+                if (!searchTerm) return true;
+                const search = searchTerm.toLowerCase();
+                return item.product_name.toLowerCase().includes(search) ||
+                    String(item.product_code).toLowerCase().includes(search) ||
+                    String(item.category || '').toLowerCase().includes(search) ||
+                    String(item.brand || '').toLowerCase().includes(search);
             })
             .sort((a, b) => a.is_low === b.is_low ? 0 : a.is_low ? -1 : 1);
     };
 
-    // Filter inventory
-    const inventory = getInventoryData().filter(item => {
-        if (!searchTerm) return true;
-        const search = searchTerm.toLowerCase();
-        return item.product_name.toLowerCase().includes(search) ||
-            String(item.product_code).toLowerCase().includes(search) ||
-            item.category.toLowerCase().includes(search) ||
-            item.brand.toLowerCase().includes(search);
-    });
+    const filteredInventory = getFilteredInventory();
 
     // Get warehouse stats
     const getWarehouseStats = (warehouseId) => {
-        const inv = DB.getAllInventory().filter(i => i.id_bodega === warehouseId);
+        const inv = inventoryData.filter(i => i.id_bodega === warehouseId);
         const total = inv.reduce((sum, i) => sum + i.stock, 0);
         return `${inv.length} productos · ${Helpers.formatNumber(total)} unidades`;
     };
 
     // Open product detail modal on row click
     const openProductModal = (item) => {
-        const product = Helpers.getProduct(item.product_id);
+        // Find product data from inventory item
+        const product = item.producto || inventoryData.find(i => i.codigo_producto === item.product_id)?.producto;
+
         if (!product) return;
 
-        const totalStock = Helpers.getTotalStock(product.id);
-        const stockPrincipal = Helpers.getInventory(product.id, 1)?.stock || 0;
-        const stockInstrum = Helpers.getInventory(product.id, 2)?.stock || 0;
+        // Calculate stocks strictly from current inventory data
+        const stockPrincipal = inventoryData.find(i => i.codigo_producto === product.id && i.id_bodega === 1)?.stock || 0;
+        const stockInstrum = inventoryData.find(i => i.codigo_producto === product.id && i.id_bodega === 2)?.stock || 0;
+        const totalStock = stockPrincipal + stockInstrum;
         const isLow = totalStock <= product.stock_minimo;
 
         openModal(
@@ -154,7 +179,7 @@ export default function InventoryPage() {
                     <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
                 </div>
             </div>,
-            'large'
+            'xl'
         );
     };
 
@@ -192,7 +217,7 @@ export default function InventoryPage() {
             <Card>
                 <div className="table-header" style={{ padding: 'var(--spacing-4)', borderBottom: '1px solid var(--border-light)' }}>
                     <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
-                        Inventario en {selectedWarehouse === 1 ? 'Bodega Principal' : 'Bodega Instrumentación'}
+                        Inventario en {warehouses.find(w => w.id_bodega === selectedWarehouse)?.nombre || 'Bodega'}
                     </h3>
                     <div className="table-search" style={{ marginTop: 'var(--spacing-3)' }}>
                         <Icons.Search size={16} />
@@ -205,78 +230,90 @@ export default function InventoryPage() {
                     </div>
                 </div>
 
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th style={{ width: '120px' }}>Código</th>
-                            <th>Producto</th>
-                            <th style={{ width: '150px' }}>Cantidad</th>
-                            <th style={{ width: '100px' }}>Mínimo</th>
-                            <th style={{ width: '120px' }}>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {inventory.map(item => (
-                            <tr
-                                key={item.product_id}
-                                onClick={() => openProductModal(item)}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <td>
-                                    <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>
-                                        {item.product_code}
-                                    </span>
-                                </td>
-                                <td>
-                                    <div className="product-info">
-                                        <div className="product-details">
-                                            <div className="product-name">{item.product_name}</div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                <span>{item.category}</span>
-                                                <span style={{ margin: '0 4px' }}>•</span>
-                                                <span>{item.brand}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span style={{
-                                        fontWeight: 600,
-                                        color: item.is_low ? 'var(--color-danger)' : 'var(--text-primary)'
-                                    }}>
-                                        {Helpers.formatNumber(item.stock, 2)}
-                                    </span>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
-                                        {item.unit?.toLowerCase()}
-                                    </span>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                        📍 {item.location || 'N/A'}
-                                    </div>
-                                </td>
-                                <td>
-                                    <span style={{ color: 'var(--text-muted)' }}>
-                                        {Helpers.formatNumber(item.min_stock)}
-                                    </span>
-                                </td>
-                                <td>
-                                    {item.is_low ? (
-                                        <Badge variant="pending">Stock Bajo</Badge>
-                                    ) : (
-                                        <Badge variant="completed">Normal</Badge>
-                                    )}
-                                </td>
+                <div className="table-container">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '120px' }}>Código</th>
+                                <th>Producto</th>
+                                <th style={{ width: '150px' }}>Cantidad</th>
+                                <th style={{ width: '100px' }}>Mínimo</th>
+                                <th style={{ width: '120px' }}>Estado</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-
-                {inventory.length === 0 && (
-                    <div className="empty-state" style={{ padding: '60px 20px' }}>
-                        <Icons.Search size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
-                        <h3 className="empty-state-title">No hay productos en esta bodega</h3>
-                        <p className="empty-state-text">Ajusta la búsqueda o selecciona otra bodega</p>
-                    </div>
-                )}
+                        </thead>
+                        <tbody>
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>
+                                        Cargando inventario...
+                                    </td>
+                                </tr>
+                            ) : filteredInventory.length === 0 ? (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>
+                                        <div className="empty-state">
+                                            <Icons.Search size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                                            <h3 className="empty-state-title">No hay productos en esta bodega</h3>
+                                            <p className="empty-state-text">Ajusta la búsqueda o selecciona otra bodega</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredInventory.map(item => (
+                                    <tr
+                                        key={`${item.product_id}-${item.id_bodega}`}
+                                        onClick={() => openProductModal(item)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <td>
+                                            <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>
+                                                {item.product_code}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div className="product-info">
+                                                <div className="product-details">
+                                                    <div className="product-name">{item.product_name}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                        <span>{item.category}</span>
+                                                        <span style={{ margin: '0 4px' }}>•</span>
+                                                        <span>{item.brand}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span style={{
+                                                fontWeight: 600,
+                                                color: item.is_low ? 'var(--color-danger)' : 'var(--text-primary)'
+                                            }}>
+                                                {Helpers.formatNumber(item.stock, 2)}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                                                {item.unit?.toLowerCase()}
+                                            </span>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                                📍 {item.location || 'N/A'}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span style={{ color: 'var(--text-muted)' }}>
+                                                {Helpers.formatNumber(item.min_stock)}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {item.is_low ? (
+                                                <Badge variant="pending">Stock Bajo</Badge>
+                                            ) : (
+                                                <Badge variant="completed">Normal</Badge>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </Card>
         </MainLayout>
     );
