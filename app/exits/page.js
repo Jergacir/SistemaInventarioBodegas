@@ -93,7 +93,7 @@ export default function ExitsPage() {
 
         // Reset selection if it's no longer valid
         if (productId) {
-            const stillAvailable = products.find(p => p.id === productId || p.codigo_producto === productId);
+            const stillAvailable = products.find(p => String(p.id) === String(productId) || String(p.codigo_producto) === String(productId));
             if (!stillAvailable) {
                 setProductId('');
                 setAvailableStock('');
@@ -107,7 +107,7 @@ export default function ExitsPage() {
         const id = e.target.value;
         setProductId(id);
 
-        const productWithStock = availableProducts.find(p => p.id === id || p.codigo_producto === id);
+        const productWithStock = availableProducts.find(p => String(p.id) === String(id) || String(p.codigo_producto) === String(id));
 
         if (productWithStock) {
             setAvailableStock(`${productWithStock.stock} ${productWithStock.unidad_medida?.toLowerCase() || ''}`);
@@ -124,7 +124,7 @@ export default function ExitsPage() {
             return;
         }
 
-        const productWithStock = availableProducts.find(p => p.id === productId || p.codigo_producto === productId);
+        const productWithStock = availableProducts.find(p => String(p.id) === String(productId) || String(p.codigo_producto) === String(productId));
 
         if (!productWithStock || productWithStock.stock < parseFloat(quantity)) {
             showToast('Stock Insuficiente', `Solo hay ${productWithStock?.stock || 0} ${productWithStock?.unidad_medida?.toLowerCase() || ''} disponibles`, 'error');
