@@ -8,7 +8,7 @@ import { Badge, StatusBadge } from "../ui/Badge";
 import { useModal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { Helpers } from "../../lib/utils/helpers";
-import { DB } from "../../lib/db";
+import { DB } from "../../lib/database";
 import { Auth } from "../../lib/auth";
 
 
