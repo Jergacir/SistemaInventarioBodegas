@@ -534,6 +534,67 @@ export const SupabaseDB = {
 
 
 
+
+  async revertMovementToPending(id) {
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .select("*")
+      .eq("id_movimiento", id)
+      .single();
+
+    if (error) throw error;
+    if (!movement) throw new Error("Movimiento no encontrado");
+
+    // Logic for Completed movements: Revert stock
+    if (movement.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', movement.codigo_producto)
+        .single();
+
+      if (movement.tipo === 'ENT') {
+        // Entry added stock, so we subtract it
+        const { data: invDest } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_destino)
+          .single();
+
+        const newStock = (invDest?.stock || 0) - movement.cantidad;
+        await supabase.from('inventario').update({ stock: newStock })
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_destino);
+      } else if (movement.tipo === 'SAL') {
+        // Exit removed stock, so we add it back
+        const { data: invOrig } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_origen)
+          .single();
+
+        const newStock = (invOrig?.stock || 0) + movement.cantidad;
+        await supabase.from('inventario').update({ stock: newStock })
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_origen);
+      }
+    }
+
+    const { error: updateError } = await supabase
+      .from("movimiento")
+      .update({
+        estado: 'P',
+        fechahoraaprobacion: null,
+        id_responsable: null
+      })
+      .eq("id_movimiento", id);
+
+    if (updateError) throw updateError;
+    return true;
+  },
+
   async createEntry(entryData) {
     // Generate sequential ID
     // 1. Get last entry

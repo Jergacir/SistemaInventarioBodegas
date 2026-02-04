@@ -5,7 +5,7 @@ import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge, StatusBadge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
 import * as XLSX from 'xlsx';
 
@@ -19,6 +19,8 @@ export default function HistoryPage() {
     const [typeFilter, setTypeFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [movements, setMovements] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     // Set default dates on mount
     useEffect(() => {
@@ -26,23 +28,35 @@ export default function HistoryPage() {
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         setDateStart(firstDayOfMonth.toISOString().split('T')[0]);
         setDateEnd(today.toISOString().split('T')[0]);
+        loadMovements();
     }, []);
 
-    const [refresh, setRefresh] = useState(0);
+    const loadMovements = async () => {
+        setIsLoading(true);
+        try {
+            const data = await DB.getAllMovements();
+            setMovements(data);
+        } catch (error) {
+            console.error("Error loading movements:", error);
+            showToast('Error', 'No se pudo cargar el historial', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-    const movements = useMemo(() => {
-        return DB.getAllMovements()
-            .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
-    }, [refresh]);
+    const handleRevert = async (id, currentStatus) => {
+        const confirmMsg = currentStatus === 'C'
+            ? '¿Estás seguro de que deseas revertir este movimiento a estado PENDIENTE? Esto revertirá los cambios en el inventario.'
+            : '¿Estás seguro de que deseas reactivar esta solicitud rechazada a PENDIENTE?';
 
-    const handleRevert = (id) => {
-        if (window.confirm('¿Estás seguro de que deseas revertir este movimiento a estado PENDIENTE? Esto revertirá los cambios en el inventario.')) {
-            const success = DB.revertMovementToPending(id);
-            if (success) {
+        if (window.confirm(confirmMsg)) {
+            try {
+                await DB.revertMovementToPending(id);
                 showToast('Movimiento Revertido', 'El movimiento ha vuelto a estado Pendiente.', 'success');
-                setRefresh(Date.now()); // Force re-fetch
+                loadMovements(); // Refresh list
                 closeModal();
-            } else {
+            } catch (error) {
+                console.error("Error reverting movement:", error);
                 showToast('Error', 'No se pudo revertir el movimiento.', 'error');
             }
         }
@@ -54,7 +68,8 @@ export default function HistoryPage() {
 
         // Type filter mapping
         const dbTypeMap = { 'ENTRADA': 'ENT', 'SALIDA': 'SAL', 'TRANSFERENCIA': 'TRF' };
-        const dbStatusMap = { 'COMPLETADO': 'C', 'PENDIENTE': 'P', 'CANCELADO': 'R' };
+        // DB Status: C=Completed, P=Pending, R=Rejected (Cancelled)
+        const dbStatusMap = { 'COMPLETADO': 'C', 'PENDIENTE': 'P', 'RECHAZADO': 'R' };
 
         if (dateStart) {
             result = result.filter(m => new Date(m.fechaHoraSolicitud) >= new Date(dateStart));
@@ -73,13 +88,15 @@ export default function HistoryPage() {
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             result = result.filter(m => {
-                const product = Helpers.getProduct(m.codigo_producto);
+                // DB.getAllMovements joins producto(nombre)
+                // m.producto might be object { nombre: '...' } or if hydration failed just check fields
+                const prodName = m.producto?.nombre || '';
+                const requester = m.solicitante?.nombre_completo || '';
+
                 return (m.codigo_movimiento && m.codigo_movimiento.toLowerCase().includes(query)) ||
-                    (product?.nombre && product.nombre.toLowerCase().includes(query)) ||
-                    (product?.codigo_visible && String(product.codigo_visible).toLowerCase().includes(query)) ||
-                    (product?.marca && product.marca.toLowerCase().includes(query)) ||
-                    (product?.categoria && product.categoria.toLowerCase().includes(query)) ||
-                    (m.solicitante_nombre && m.solicitante_nombre.toLowerCase().includes(query));
+                    (prodName.toLowerCase().includes(query)) ||
+                    (m.codigo_producto && String(m.codigo_producto).toLowerCase().includes(query)) ||
+                    (requester.toLowerCase().includes(query));
             });
         }
 
@@ -95,23 +112,22 @@ export default function HistoryPage() {
     };
 
     const exportData = () => {
-        const headers = ['Código', 'Tipo', 'Producto', 'Código Producto', 'Cantidad', 'Unidad', 'Origen', 'Destino', 'Estado', 'Solicitante', 'Notas', 'Fecha'];
+        const headers = ['Código', 'Tipo', 'Producto', 'Código Producto', 'Cantidad', 'Origen', 'Destino', 'Estado', 'Solicitante', 'Responsable', 'Notas', 'Fecha'];
         const typeNames = { 'ENT': 'ENTRADA', 'SAL': 'SALIDA', 'TRF': 'TRANSFERENCIA' };
-        const statusNames = { 'C': 'COMPLETADO', 'P': 'PENDIENTE', 'R': 'REVERTIDO' };
+        const statusNames = { 'C': 'COMPLETADO', 'P': 'PENDIENTE', 'R': 'RECHAZADO' };
 
         const rows = filteredMovements.map(mov => {
-            const product = Helpers.getProduct(mov.codigo_producto);
             return [
                 mov.codigo_movimiento,
                 typeNames[mov.tipo] || mov.tipo,
-                product?.nombre || '',
-                product?.codigo_visible || '',
+                mov.producto?.nombre || '',
+                mov.codigo_producto,
                 mov.cantidad,
-                product?.unidad_medida || '',
-                mov.id_bodega_origen ? Helpers.getWarehouseName(mov.id_bodega_origen) : '',
-                mov.id_bodega_destino ? Helpers.getWarehouseName(mov.id_bodega_destino) : '',
+                mov.bodega_origen?.nombre || 'Externo',
+                mov.bodega_destino?.nombre || 'Externo',
                 statusNames[mov.estado] || mov.estado,
-                mov.solicitante_nombre || '',
+                mov.solicitante?.nombre_completo || 'Sistema',
+                mov.responsable?.nombre_completo || '',
                 mov.notas || '',
                 Helpers.formatDateTime(mov.fechaHoraSolicitud)
             ];
@@ -130,16 +146,9 @@ export default function HistoryPage() {
         showToast('Exportación Completada', 'El archivo Excel se ha descargado correctamente', 'success');
     };
 
-
-
     const showMovementDetails = (movement) => {
-        const product = Helpers.getProduct(movement.codigo_producto);
-        const creator = DB.getUserById(movement.id_solicitante);
-
-        let requesterName = 'Mismo usuario';
-        if (movement.tipo === 'SAL' || movement.tipo === 'TRF') {
-            requesterName = movement.solicitante_nombre || creator?.nombre_completo || 'Externo';
-        }
+        // Data is already looked up via DB.getAllMovements join
+        const product = movement.producto || { nombre: 'Cargando...' };
 
         let headerColor = 'var(--text-primary)';
         if (movement.tipo === 'ENT') headerColor = 'var(--color-success)';
@@ -171,7 +180,7 @@ export default function HistoryPage() {
                     <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Producto</div>
                     <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>{product?.nombre || 'N/A'}</div>
                     <div style={{ fontSize: '13px', color: 'var(--color-primary)', fontFamily: 'monospace' }}>
-                        <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>Código:</span> {product?.codigo_visible || '-'}
+                        <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>Código:</span> {movement.codigo_producto || '-'}
                     </div>
                 </div>
 
@@ -179,44 +188,65 @@ export default function HistoryPage() {
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Cantidad</div>
                         <div style={{ fontSize: '18px', fontWeight: 600, color: headerColor }}>
-                            {movement.tipo === 'SAL' ? '-' : movement.tipo === 'ENT' ? '+' : ''}{Helpers.formatNumber(movement.cantidad, 2)} {product?.unidad_medida?.toLowerCase() || ''}
+                            {movement.tipo === 'SAL' ? '-' : movement.tipo === 'ENT' ? '+' : ''}{Helpers.formatNumber(movement.cantidad, 2)}
                         </div>
                     </div>
                     <div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Fecha</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Fecha Solicitud</div>
                         <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.formatDateTime(movement.fechaHoraSolicitud)}</div>
                     </div>
 
                     {movement.id_bodega_origen && (
                         <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Origen</div>
-                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(movement.id_bodega_origen)}</div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{movement.bodega_origen?.nombre || 'Externo'}</div>
                         </div>
                     )}
 
                     {movement.id_bodega_destino && (
                         <div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Destino</div>
-                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(movement.id_bodega_destino)}</div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{movement.bodega_destino?.nombre || 'Externo/Cliente'}</div>
+                        </div>
+                    )}
+                </div>
+
+                {/* User Details Grid */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '12px',
+                    padding: '12px',
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '8px',
+                    marginBottom: '20px'
+                }}>
+                    <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '2px' }}>Solicitado por</div>
+                        <div style={{ fontSize: '13px', fontWeight: 500 }}>
+                            {movement.solicitante?.nombre_completo || 'Sistema'}
+                        </div>
+                    </div>
+
+                    {(movement.estado === 'C' || movement.estado === 'R') && (
+                        <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '2px' }}>
+                                {movement.estado === 'R' ? 'Rechazado por' : 'Aprobado por'}
+                            </div>
+                            <div style={{ fontSize: '13px', fontWeight: 500 }}>
+                                {movement.responsable?.nombre_completo || 'N/A'}
+                            </div>
                         </div>
                     )}
 
-                    {movement.tipo === 'ENT' ? (
-                        <div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Registrado por</div>
-                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{creator?.nombre_completo || 'Sistema'}</div>
+                    {movement.tipo === 'ENT' && (
+                        <div style={{ gridColumn: 'span 2' }}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '2px' }}>Registrado por</div>
+                            <div style={{ fontSize: '13px', fontWeight: 500 }}>
+                                {movement.responsable?.nombre_completo || 'Sistema'}
+                            </div>
                         </div>
-                    ) : (
-                        <>
-                            <div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Creado por</div>
-                                <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{creator?.nombre_completo || 'Sistema'}</div>
-                            </div>
-                            <div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Solicitado por</div>
-                                <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{requesterName}</div>
-                            </div>
-                        </>
                     )}
                 </div>
 
@@ -230,15 +260,15 @@ export default function HistoryPage() {
                 )}
 
                 <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                    {/* Revert Button - Only for Completed movements */}
-                    {movement.estado === 'C' && (
+                    {/* Revert Button - For Completed OR Rejected movements */}
+                    {(movement.estado === 'C' || movement.estado === 'R') && (
                         <Button
                             variant="warning"
-                            onClick={() => handleRevert(movement.id)}
+                            onClick={() => handleRevert(movement.id_movimiento, movement.estado)}
                             style={{ marginRight: 'auto' }}
                         >
                             <Icons.Refresh size={18} />
-                            Volver a Pendiente
+                            Revertir a Pendiente
                         </Button>
                     )}
                     <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
@@ -301,7 +331,7 @@ export default function HistoryPage() {
                             <option value="">Todos</option>
                             <option value="COMPLETADO">Completado</option>
                             <option value="PENDIENTE">Pendiente</option>
-                            <option value="CANCELADO">Cancelado</option>
+                            <option value="RECHAZADO">Rechazado</option>
                         </select>
                     </div>
                     <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
@@ -310,7 +340,7 @@ export default function HistoryPage() {
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Código, producto, marca, categoría..."
+                            placeholder="Código, producto, marca, solicitante..."
                             style={{ height: '36px' }}
                         />
                     </div>
@@ -322,78 +352,81 @@ export default function HistoryPage() {
 
             {/* History Table */}
             <Card>
-                <div className="table-header" style={{ padding: 'var(--spacing-4)', borderBottom: '1px solid var(--border-light)' }}>
-                    <h3 style={{ margin: 0 }}>Movimientos ({filteredMovements.length})</h3>
-                </div>
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th style={{ width: '120px' }}>Código</th>
-                            <th style={{ width: '110px' }}>Tipo</th>
-                            <th>Producto</th>
-                            <th style={{ width: '100px' }}>Cantidad</th>
-                            <th style={{ width: '180px' }}>Origen → Destino</th>
-                            <th style={{ width: '150px' }}>Fecha</th>
-                            <th style={{ width: '110px' }}>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredMovements.map(mov => {
-                            const product = Helpers.getProduct(mov.codigo_producto);
-                            const sign = mov.tipo === 'ENT' ? '+' : mov.tipo === 'SAL' ? '-' : '';
-                            const colorClass = mov.tipo === 'ENT' ? 'success' : mov.tipo === 'SAL' ? 'danger' : '';
-
-                            return (
-                                <tr key={mov.id_movimiento} onClick={() => showMovementDetails(mov)} style={{ cursor: 'pointer' }}>
-                                    <td>
-                                        <span style={{ color: 'var(--color-primary)', fontWeight: 500, fontFamily: 'monospace' }}>
-                                            {mov.codigo_movimiento}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <Badge variant={typeBadges[mov.tipo]}>
-                                            {typeLabels[mov.tipo]}
-                                        </Badge>
-                                    </td>
-                                    <td>
-                                        <div className="product-info">
-                                            <div className="product-details">
-                                                <div className="product-name">{product?.nombre || 'Producto'}</div>
-                                                <div className="product-code">{product?.codigo_visible || mov.codigo_producto}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span style={{ color: colorClass ? `var(--color-${colorClass})` : 'inherit', fontWeight: 600 }}>
-                                            {sign}{Helpers.formatNumber(mov.cantidad, 2)}
-                                        </span>
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
-                                            {product?.unidad_medida?.toLowerCase()}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span style={{ color: 'var(--text-muted)' }}>
-                                            {mov.id_bodega_origen ? Helpers.getWarehouseName(mov.id_bodega_origen) : 'Externo'}
-                                        </span>
-                                        <span style={{ margin: '0 4px' }}>→</span>
-                                        <span>
-                                            {mov.id_bodega_destino ? Helpers.getWarehouseName(mov.id_bodega_destino) : 'Cliente'}
-                                        </span>
-                                    </td>
-                                    <td>{Helpers.formatDateTime(mov.fechaHoraSolicitud)}</td>
-                                    <td><StatusBadge status={mov.estado} /></td>
+                {isLoading ? (
+                    <div style={{ textAlign: 'center', padding: '40px' }}>Cargando historial...</div>
+                ) : (
+                    <>
+                        <div className="table-header" style={{ padding: 'var(--spacing-4)', borderBottom: '1px solid var(--border-light)' }}>
+                            <h3 style={{ margin: 0 }}>Movimientos ({filteredMovements.length})</h3>
+                        </div>
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: '120px' }}>Código</th>
+                                    <th style={{ width: '110px' }}>Tipo</th>
+                                    <th>Producto</th>
+                                    <th style={{ width: '100px' }}>Cantidad</th>
+                                    <th style={{ width: '180px' }}>Origen → Destino</th>
+                                    <th style={{ width: '150px' }}>Fecha</th>
+                                    <th style={{ width: '110px' }}>Estado</th>
                                 </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                            </thead>
+                            <tbody>
+                                {filteredMovements.map(mov => {
+                                    const product = mov.producto || { nombre: 'Producto' };
+                                    const sign = mov.tipo === 'ENT' ? '+' : mov.tipo === 'SAL' ? '-' : '';
+                                    const colorClass = mov.tipo === 'ENT' ? 'success' : mov.tipo === 'SAL' ? 'danger' : '';
 
-                {filteredMovements.length === 0 && (
-                    <div className="empty-state" style={{ padding: '60px 20px' }}>
-                        <Icons.History size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
-                        <h3 className="empty-state-title">No hay movimientos</h3>
-                        <p className="empty-state-text">No se encontraron movimientos con los filtros aplicados</p>
-                    </div>
+                                    return (
+                                        <tr key={mov.id_movimiento} onClick={() => showMovementDetails(mov)} style={{ cursor: 'pointer' }}>
+                                            <td>
+                                                <span style={{ color: 'var(--color-primary)', fontWeight: 500, fontFamily: 'monospace' }}>
+                                                    {mov.codigo_movimiento}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <Badge variant={typeBadges[mov.tipo]}>
+                                                    {typeLabels[mov.tipo]}
+                                                </Badge>
+                                            </td>
+                                            <td>
+                                                <div className="product-info">
+                                                    <div className="product-details">
+                                                        <div className="product-name">{product?.nombre || 'Producto'}</div>
+                                                        <div className="product-code">{mov.codigo_producto}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span style={{ color: colorClass ? `var(--color-${colorClass})` : 'inherit', fontWeight: 600 }}>
+                                                    {sign}{Helpers.formatNumber(mov.cantidad, 2)}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span style={{ color: 'var(--text-muted)' }}>
+                                                    {mov.bodega_origen?.nombre || 'Externo'}
+                                                </span>
+                                                <span style={{ margin: '0 4px' }}>→</span>
+                                                <span>
+                                                    {mov.bodega_destino?.nombre || 'Cliente'}
+                                                </span>
+                                            </td>
+                                            <td>{Helpers.formatDateTime(mov.fechaHoraSolicitud)}</td>
+                                            <td><StatusBadge status={mov.estado} /></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+
+                        {filteredMovements.length === 0 && (
+                            <div className="empty-state" style={{ padding: '60px 20px' }}>
+                                <Icons.History size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                                <h3 className="empty-state-title">No hay movimientos</h3>
+                                <p className="empty-state-text">No se encontraron movimientos con los filtros aplicados</p>
+                            </div>
+                        )}
+                    </>
                 )}
             </Card>
         </MainLayout>
