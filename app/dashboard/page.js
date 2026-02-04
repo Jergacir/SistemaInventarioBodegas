@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -15,10 +15,8 @@ import { Helpers } from "../lib/utils/helpers";
 import { getAccessDeniedMessage } from "../lib/permissions";
 import Link from "next/link";
 
-// Evitar pre-renderizado estático
-export const dynamic = 'force-dynamic';
-
-export default function DashboardPage() {
+// Componente interno que usa useSearchParams
+function DashboardContent() {
   const searchParams = useSearchParams();
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -286,5 +284,22 @@ export default function DashboardPage() {
         </Link>
       </div>
     </MainLayout>
+  );
+}
+
+// Componente principal con Suspense
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <MainLayout>
+          <div style={{ padding: "20px", textAlign: "center" }}>
+            Cargando...
+          </div>
+        </MainLayout>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }
