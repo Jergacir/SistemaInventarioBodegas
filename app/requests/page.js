@@ -5,13 +5,13 @@ import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge, StatusBadge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
-import { MockData } from '../lib/mockData';
 
 export default function RequestsPage() {
     const [currentFilter, setCurrentFilter] = useState('all');
     const [requests, setRequests] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     const { openModal, closeModal } = useModal();
     const { showToast } = useToast();
 
@@ -19,24 +19,32 @@ export default function RequestsPage() {
         loadRequests();
     }, [currentFilter]);
 
-    const loadRequests = () => {
-        const movements = DB.getAllMovements();
-        const typeMap = { 'ENT': 'ENTRADA', 'SAL': 'SALIDA', 'TRF': 'TRANSFERENCIA' };
+    const loadRequests = async () => {
+        setIsLoading(true);
+        try {
+            const movements = await DB.getAllMovements();
+            const typeMap = { 'ENT': 'ENTRADA', 'SAL': 'SALIDA', 'TRF': 'TRANSFERENCIA' };
 
-        let pending = movements
-            .filter(m => m.estado === 'P')
-            .map(m => ({
-                ...m,
-                tipo_display: typeMap[m.tipo] || m.tipo,
-            }))
-            .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
+            let pending = movements
+                .filter(m => m.estado === 'P')
+                .map(m => ({
+                    ...m,
+                    tipo_display: typeMap[m.tipo] || m.tipo,
+                }))
+                .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
 
-        if (currentFilter !== 'all') {
-            const filterMap = { 'ENTRADA': 'ENT', 'SALIDA': 'SAL', 'TRANSFERENCIA': 'TRF' };
-            pending = pending.filter(m => m.tipo === filterMap[currentFilter]);
+            if (currentFilter !== 'all') {
+                const filterMap = { 'ENTRADA': 'ENT', 'SALIDA': 'SAL', 'TRANSFERENCIA': 'TRF' };
+                pending = pending.filter(m => m.tipo === filterMap[currentFilter]);
+            }
+
+            setRequests(pending);
+        } catch (error) {
+            console.error("Error loading requests:", error);
+            showToast('Error', 'No se pudieron cargar las solicitudes', 'error');
+        } finally {
+            setIsLoading(false);
         }
-
-        setRequests(pending);
     };
 
     const getCurrentUser = () => {
@@ -51,55 +59,68 @@ export default function RequestsPage() {
         return ['ADMIN', 'SUPERVISOR'].includes(user.rol);
     };
 
-    const handleApprove = (item) => {
-        // Check stock for outgoing movements
-        if (item.tipo === 'SAL' || item.tipo === 'TRF') {
-            const inventory = Helpers.getInventory(item.codigo_producto, item.id_bodega_origen);
-            if (!inventory || inventory.stock < item.cantidad) {
-                showToast('Stock Insuficiente', 'No hay suficiente stock en origen para aprobar', 'error');
+    const handleApprove = async (item) => {
+        // Validation for outgoing movements stock
+        if (item.tipo === 'SAL') {
+            try {
+                // Get current live stock to verify before approving
+                const inventory = await DB.getInventoryByProduct(item.codigo_producto);
+                const stockItem = inventory.find(i => i.id_bodega === item.id_bodega_origen);
+
+                if (!stockItem || stockItem.stock < item.cantidad) {
+                    showToast('Stock Insuficiente', `Solo hay ${stockItem?.stock || 0} disponibles en origen`, 'error');
+                    return;
+                }
+            } catch (error) {
+                console.error("Error verifying stock:", error);
+                showToast('Error', 'No se pudo verificar el stock disponible', 'error');
                 return;
             }
         }
 
-        // Update movement status
-        const rawMov = MockData.MOVIMIENTO.find(m => m.id_movimiento === item.id_movimiento);
-        if (rawMov) {
-            rawMov.estado = 'C';
-            rawMov.fechaHoraAprobacion = new Date().toISOString();
-            rawMov.id_responsable = getCurrentUser().id_usuario;
+        try {
+            await DB.updateMovement(item.id_movimiento, {
+                estado: 'C',
+                id_responsable: getCurrentUser().id_usuario
+            });
 
-            // Update inventory
-            DB.updateInventory(rawMov);
-
-            showToast('Solicitud Aprobada', `Movimiento ${rawMov.codigo_movimiento} completado`, 'success');
+            showToast('Solicitud Aprobada', `Movimiento ${item.codigo_movimiento} completado`, 'success');
+            closeModal();
+            loadRequests();
+        } catch (error) {
+            console.error("Error approving request:", error);
+            showToast('Error', 'No se pudo aprobar la solicitud', 'error');
         }
-
-        closeModal();
-        loadRequests();
     };
 
-    const handleReject = (item) => {
-        const rawMov = MockData.MOVIMIENTO.find(m => m.id_movimiento === item.id_movimiento);
-        if (rawMov) {
-            rawMov.estado = 'R';
-            rawMov.fechaHoraAprobacion = new Date().toISOString();
-            rawMov.id_responsable = getCurrentUser().id_usuario;
+    const handleReject = async (item) => {
+        try {
+            await DB.updateMovement(item.id_movimiento, {
+                estado: 'R',
+                id_responsable: getCurrentUser().id_usuario
+            });
 
-            showToast('Solicitud Rechazada', 'La solicitud ha sido cancelada', 'info');
+            showToast('Solicitud Rechazada', 'La solicitud ha sido cancelada y archivada', 'info');
+            closeModal();
+            loadRequests();
+        } catch (error) {
+            console.error("Error rejecting request:", error);
+            showToast('Error', 'No se pudo rechazar la solicitud', 'error');
         }
-
-        closeModal();
-        loadRequests();
     };
 
     const showDetails = (item) => {
-        const product = Helpers.getProduct(item.codigo_producto);
+        // Hydrate product if not present (though getAllMovements should have it)
+        // If DB.getAllMovements joins properly, item.producto should be an object.
+        // However, existing code used Helpers.getProduct(code).
+        // Let's use item.producto if available, fallback to basic info
+        const product = item.producto || { nombre: 'Cargando...', codigo_visible: item.codigo_producto };
         const isTransfer = item.tipo === 'TRF';
 
         const getBadgeClass = (tipo) => {
             switch (tipo) {
                 case 'ENT': return 'completed';
-                case 'SAL': return 'cancelled';
+                case 'SAL': return 'cancelled'; // Re-using cancelled just for color diff
                 case 'TRF': return 'pending';
                 default: return 'pending';
             }
@@ -115,7 +136,7 @@ export default function RequestsPage() {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Producto:</span>
-                    <span style={{ fontWeight: 500 }}>{product?.nombre} ({product?.codigo_visible})</span>
+                    <span style={{ fontWeight: 500 }}>{product?.nombre} ({product?.codigo_visible || item.codigo_producto})</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -127,23 +148,23 @@ export default function RequestsPage() {
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Origen:</span>
-                            <span>{Helpers.getWarehouseName(item.id_bodega_origen)}</span>
+                            <span>{item.bodega_origen?.nombre || 'Bodega Origen'}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Destino:</span>
-                            <span>{Helpers.getWarehouseName(item.id_bodega_destino)}</span>
+                            <span>{item.bodega_destino?.nombre || 'Bodega Destino'}</span>
                         </div>
                     </>
                 ) : (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Bodega:</span>
-                        <span>{Helpers.getWarehouseName(item.id_bodega_destino || item.id_bodega_origen)}</span>
+                        <span>{item.bodega_destino?.nombre || item.bodega_origen?.nombre || 'Bodega'}</span>
                     </div>
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: 'var(--text-muted)' }}>Solicitante:</span>
-                    <span>{item.solicitante_nombre || DB.getUserById(item.id_solicitante)?.nombre_completo || 'Sistema'}</span>
+                    <span>{item.solicitante?.nombre_completo || 'Sistema'}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -160,7 +181,7 @@ export default function RequestsPage() {
 
                 {canApprove() ? (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-light)' }}>
-                        <Button variant="danger" onClick={() => handleReject(item)}>
+                        <Button variant="secondary" onClick={() => handleReject(item)}>
                             Rechazar
                         </Button>
                         <Button variant="primary" onClick={() => handleApprove(item)}>
@@ -215,7 +236,9 @@ export default function RequestsPage() {
             </div>
 
             {/* Requests Grid */}
-            {requests.length === 0 ? (
+            {isLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>Cargando solicitudes...</div>
+            ) : requests.length === 0 ? (
                 <div className="empty-state">
                     <Icons.Check size={64} className="empty-state-icon" />
                     <h3 className="empty-state-title">No hay solicitudes pendientes</h3>
@@ -224,16 +247,17 @@ export default function RequestsPage() {
             ) : (
                 <div className="requests-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--spacing-4)' }}>
                     {requests.map(item => {
-                        const product = Helpers.getProduct(item.codigo_producto);
+                        // DB.getAllMovements joins producto as object, so we use item.producto
+                        const product = item.producto || { nombre: 'Producto', codigo_visible: item.codigo_producto };
                         const isTransfer = item.tipo === 'TRF';
 
                         let locationText = '';
                         if (isTransfer) {
-                            locationText = `${Helpers.getWarehouseName(item.id_bodega_origen)} → ${Helpers.getWarehouseName(item.id_bodega_destino)}`;
+                            locationText = `${item.bodega_origen?.nombre || 'Origen'} → ${item.bodega_destino?.nombre || 'Destino'}`;
                         } else if (item.tipo === 'ENT') {
-                            locationText = `Hacia ${Helpers.getWarehouseName(item.id_bodega_destino)}`;
+                            locationText = `Hacia ${item.bodega_destino?.nombre || 'Destino'}`;
                         } else {
-                            locationText = `Desde ${Helpers.getWarehouseName(item.id_bodega_origen)}`;
+                            locationText = `Desde ${item.bodega_origen?.nombre || 'Origen'}`;
                         }
 
                         return (
@@ -252,16 +276,16 @@ export default function RequestsPage() {
                                     </div>
 
                                     <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '4px' }}>
-                                        {product?.nombre || 'Producto Desconocido'}
+                                        {product.nombre || 'Producto Desconocido'}
                                     </div>
                                     <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                                        {product?.codigo_visible || 'N/A'}
+                                        {product.codigo_visible || item.codigo_producto}
                                     </div>
 
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                                         <div>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Cantidad</div>
-                                            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{item.cantidad} {product?.unidad_medida?.toLowerCase()}</div>
+                                            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{item.cantidad} {product.unidad_medida?.toLowerCase()}</div>
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ubicación</div>
@@ -271,10 +295,10 @@ export default function RequestsPage() {
 
                                     <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <div className="user-avatar" style={{ width: '24px', height: '24px', fontSize: '11px' }}>
-                                            {(item.solicitante_nombre || 'U').charAt(0).toUpperCase()}
+                                            {(item.solicitante?.nombre_completo || 'U').charAt(0).toUpperCase()}
                                         </div>
                                         <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                                            Solicitado por <strong style={{ color: 'var(--text-primary)' }}>{item.solicitante_nombre || 'Usuario'}</strong>
+                                            Solicitado por <strong style={{ color: 'var(--text-primary)' }}>{item.solicitante?.nombre_completo || 'Usuario'}</strong>
                                         </span>
                                     </div>
                                 </div>
