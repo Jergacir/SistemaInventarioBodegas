@@ -15,6 +15,9 @@ import { Helpers } from "../lib/utils/helpers";
 import { getAccessDeniedMessage } from "../lib/permissions";
 import Link from "next/link";
 
+// Evitar pre-renderizado estático
+export const dynamic = 'force-dynamic';
+
 export default function DashboardPage() {
   const searchParams = useSearchParams();
   const [showAccessDenied, setShowAccessDenied] = useState(false);
