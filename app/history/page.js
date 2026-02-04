@@ -1,0 +1,401 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { MainLayout } from '../components/layout';
+import { Card, Button, Icons, Badge, StatusBadge } from '../components/ui';
+import { useModal } from '../components/ui/Modal';
+import { useToast } from '../components/ui/Toast';
+import { DB } from '../lib/db';
+import { Helpers } from '../lib/utils/helpers';
+import * as XLSX from 'xlsx';
+
+export default function HistoryPage() {
+    const { openModal, closeModal } = useModal();
+    const { showToast } = useToast();
+
+    // Filter state
+    const [dateStart, setDateStart] = useState('');
+    const [dateEnd, setDateEnd] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Set default dates on mount
+    useEffect(() => {
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        setDateStart(firstDayOfMonth.toISOString().split('T')[0]);
+        setDateEnd(today.toISOString().split('T')[0]);
+    }, []);
+
+    const [refresh, setRefresh] = useState(0);
+
+    const movements = useMemo(() => {
+        return DB.getAllMovements()
+            .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
+    }, [refresh]);
+
+    const handleRevert = (id) => {
+        if (window.confirm('¿Estás seguro de que deseas revertir este movimiento a estado PENDIENTE? Esto revertirá los cambios en el inventario.')) {
+            const success = DB.revertMovementToPending(id);
+            if (success) {
+                showToast('Movimiento Revertido', 'El movimiento ha vuelto a estado Pendiente.', 'success');
+                setRefresh(Date.now()); // Force re-fetch
+                closeModal();
+            } else {
+                showToast('Error', 'No se pudo revertir el movimiento.', 'error');
+            }
+        }
+    };
+
+    // Apply filters
+    const filteredMovements = useMemo(() => {
+        let result = [...movements];
+
+        // Type filter mapping
+        const dbTypeMap = { 'ENTRADA': 'ENT', 'SALIDA': 'SAL', 'TRANSFERENCIA': 'TRF' };
+        const dbStatusMap = { 'COMPLETADO': 'C', 'PENDIENTE': 'P', 'CANCELADO': 'R' };
+
+        if (dateStart) {
+            result = result.filter(m => new Date(m.fechaHoraSolicitud) >= new Date(dateStart));
+        }
+        if (dateEnd) {
+            const endDate = new Date(dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            result = result.filter(m => new Date(m.fechaHoraSolicitud) <= endDate);
+        }
+        if (typeFilter) {
+            result = result.filter(m => m.tipo === dbTypeMap[typeFilter]);
+        }
+        if (statusFilter) {
+            result = result.filter(m => m.estado === dbStatusMap[statusFilter]);
+        }
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(m => {
+                const product = Helpers.getProduct(m.codigo_producto);
+                return (m.codigo_movimiento && m.codigo_movimiento.toLowerCase().includes(query)) ||
+                    (product?.nombre && product.nombre.toLowerCase().includes(query)) ||
+                    (product?.codigo_visible && String(product.codigo_visible).toLowerCase().includes(query)) ||
+                    (product?.marca && product.marca.toLowerCase().includes(query)) ||
+                    (product?.categoria && product.categoria.toLowerCase().includes(query)) ||
+                    (m.solicitante_nombre && m.solicitante_nombre.toLowerCase().includes(query));
+            });
+        }
+
+        return result;
+    }, [movements, dateStart, dateEnd, typeFilter, statusFilter, searchQuery]);
+
+    const clearFilters = () => {
+        setDateStart('');
+        setDateEnd('');
+        setTypeFilter('');
+        setStatusFilter('');
+        setSearchQuery('');
+    };
+
+    const exportData = () => {
+        const headers = ['Código', 'Tipo', 'Producto', 'Código Producto', 'Cantidad', 'Unidad', 'Origen', 'Destino', 'Estado', 'Solicitante', 'Notas', 'Fecha'];
+        const typeNames = { 'ENT': 'ENTRADA', 'SAL': 'SALIDA', 'TRF': 'TRANSFERENCIA' };
+        const statusNames = { 'C': 'COMPLETADO', 'P': 'PENDIENTE', 'R': 'REVERTIDO' };
+
+        const rows = filteredMovements.map(mov => {
+            const product = Helpers.getProduct(mov.codigo_producto);
+            return [
+                mov.codigo_movimiento,
+                typeNames[mov.tipo] || mov.tipo,
+                product?.nombre || '',
+                product?.codigo_visible || '',
+                mov.cantidad,
+                product?.unidad_medida || '',
+                mov.id_bodega_origen ? Helpers.getWarehouseName(mov.id_bodega_origen) : '',
+                mov.id_bodega_destino ? Helpers.getWarehouseName(mov.id_bodega_destino) : '',
+                statusNames[mov.estado] || mov.estado,
+                mov.solicitante_nombre || '',
+                mov.notas || '',
+                Helpers.formatDateTime(mov.fechaHoraSolicitud)
+            ];
+        });
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, "Historial");
+
+        // Generate Excel file
+        XLSX.writeFile(wb, `historial_movimientos_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        showToast('Exportación Completada', 'El archivo Excel se ha descargado correctamente', 'success');
+    };
+
+
+
+    const showMovementDetails = (movement) => {
+        const product = Helpers.getProduct(movement.codigo_producto);
+        const creator = DB.getUserById(movement.id_solicitante);
+
+        let requesterName = 'Mismo usuario';
+        if (movement.tipo === 'SAL' || movement.tipo === 'TRF') {
+            requesterName = movement.solicitante_nombre || creator?.nombre_completo || 'Externo';
+        }
+
+        let headerColor = 'var(--text-primary)';
+        if (movement.tipo === 'ENT') headerColor = 'var(--color-success)';
+        if (movement.tipo === 'SAL') headerColor = 'var(--color-danger)';
+
+        const typeLabels = { 'ENT': 'Entrada', 'SAL': 'Salida', 'TRF': 'Transferencia' };
+
+        openModal(
+            'Detalle de Movimiento',
+            <div style={{ padding: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '15px' }}>
+                    <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '4px' }}>Código de Transacción</div>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: headerColor }}>{movement.codigo_movimiento}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '4px' }}>Estado</div>
+                        <StatusBadge status={movement.estado} />
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                    <Badge variant={movement.tipo === 'ENT' ? 'completed' : movement.tipo === 'SAL' ? 'cancelled' : 'pending'}>
+                        {typeLabels[movement.tipo]}
+                    </Badge>
+                </div>
+
+                <div style={{ backgroundColor: 'var(--bg-subtle)', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Producto</div>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '5px' }}>{product?.nombre || 'N/A'}</div>
+                    <div style={{ fontSize: '13px', color: 'var(--color-primary)', fontFamily: 'monospace' }}>
+                        <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>Código:</span> {product?.codigo_visible || '-'}
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Cantidad</div>
+                        <div style={{ fontSize: '18px', fontWeight: 600, color: headerColor }}>
+                            {movement.tipo === 'SAL' ? '-' : movement.tipo === 'ENT' ? '+' : ''}{Helpers.formatNumber(movement.cantidad, 2)} {product?.unidad_medida?.toLowerCase() || ''}
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Fecha</div>
+                        <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.formatDateTime(movement.fechaHoraSolicitud)}</div>
+                    </div>
+
+                    {movement.id_bodega_origen && (
+                        <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Origen</div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(movement.id_bodega_origen)}</div>
+                        </div>
+                    )}
+
+                    {movement.id_bodega_destino && (
+                        <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Destino</div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(movement.id_bodega_destino)}</div>
+                        </div>
+                    )}
+
+                    {movement.tipo === 'ENT' ? (
+                        <div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Registrado por</div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{creator?.nombre_completo || 'Sistema'}</div>
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Creado por</div>
+                                <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{creator?.nombre_completo || 'Sistema'}</div>
+                            </div>
+                            <div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Solicitado por</div>
+                                <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{requesterName}</div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {movement.notas && (
+                    <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-light)' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>Notas</div>
+                        <div style={{ fontSize: '14px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-light)', fontStyle: 'italic' }}>
+                            "{movement.notas}"
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                    {/* Revert Button - Only for Completed movements */}
+                    {movement.estado === 'C' && (
+                        <Button
+                            variant="warning"
+                            onClick={() => handleRevert(movement.id)}
+                            style={{ marginRight: 'auto' }}
+                        >
+                            <Icons.Refresh size={18} />
+                            Volver a Pendiente
+                        </Button>
+                    )}
+                    <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
+                </div>
+            </div>
+        );
+    };
+
+    const typeLabels = { 'ENT': 'Entrada', 'SAL': 'Salida', 'TRF': 'Transferencia' };
+    const typeBadges = { 'ENT': 'completed', 'SAL': 'cancelled', 'TRF': 'pending' };
+
+    return (
+        <MainLayout>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">Historial de Movimientos</h1>
+                    <p className="page-subtitle">Registro completo de todas las transacciones</p>
+                </div>
+                <div className="page-actions">
+                    <Button variant="secondary" onClick={exportData}>
+                        <Icons.Export size={18} />
+                        Exportar
+                    </Button>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <Card style={{ marginBottom: 'var(--spacing-4)', padding: 'var(--spacing-4)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                    <div className="form-group" style={{ margin: 0, minWidth: '140px' }}>
+                        <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Fecha Inicio</label>
+                        <input
+                            type="date"
+                            value={dateStart}
+                            onChange={(e) => setDateStart(e.target.value)}
+                            style={{ height: '36px' }}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0, minWidth: '140px' }}>
+                        <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Fecha Fin</label>
+                        <input
+                            type="date"
+                            value={dateEnd}
+                            onChange={(e) => setDateEnd(e.target.value)}
+                            style={{ height: '36px' }}
+                        />
+                    </div>
+                    <div className="form-group" style={{ margin: 0, minWidth: '140px' }}>
+                        <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Tipo</label>
+                        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ height: '36px' }}>
+                            <option value="">Todos</option>
+                            <option value="ENTRADA">Entradas</option>
+                            <option value="SALIDA">Salidas</option>
+                            <option value="TRANSFERENCIA">Transferencias</option>
+                        </select>
+                    </div>
+                    <div className="form-group" style={{ margin: 0, minWidth: '140px' }}>
+                        <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Estado</label>
+                        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ height: '36px' }}>
+                            <option value="">Todos</option>
+                            <option value="COMPLETADO">Completado</option>
+                            <option value="PENDIENTE">Pendiente</option>
+                            <option value="CANCELADO">Cancelado</option>
+                        </select>
+                    </div>
+                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
+                        <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>Buscar</label>
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Código, producto, marca, categoría..."
+                            style={{ height: '36px' }}
+                        />
+                    </div>
+                    <Button variant="secondary" onClick={clearFilters} style={{ height: '36px' }}>
+                        Limpiar
+                    </Button>
+                </div>
+            </Card>
+
+            {/* History Table */}
+            <Card>
+                <div className="table-header" style={{ padding: 'var(--spacing-4)', borderBottom: '1px solid var(--border-light)' }}>
+                    <h3 style={{ margin: 0 }}>Movimientos ({filteredMovements.length})</h3>
+                </div>
+                <table className="data-table">
+                    <thead>
+                        <tr>
+                            <th style={{ width: '120px' }}>Código</th>
+                            <th style={{ width: '110px' }}>Tipo</th>
+                            <th>Producto</th>
+                            <th style={{ width: '100px' }}>Cantidad</th>
+                            <th style={{ width: '180px' }}>Origen → Destino</th>
+                            <th style={{ width: '150px' }}>Fecha</th>
+                            <th style={{ width: '110px' }}>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredMovements.map(mov => {
+                            const product = Helpers.getProduct(mov.codigo_producto);
+                            const sign = mov.tipo === 'ENT' ? '+' : mov.tipo === 'SAL' ? '-' : '';
+                            const colorClass = mov.tipo === 'ENT' ? 'success' : mov.tipo === 'SAL' ? 'danger' : '';
+
+                            return (
+                                <tr key={mov.id_movimiento} onClick={() => showMovementDetails(mov)} style={{ cursor: 'pointer' }}>
+                                    <td>
+                                        <span style={{ color: 'var(--color-primary)', fontWeight: 500, fontFamily: 'monospace' }}>
+                                            {mov.codigo_movimiento}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <Badge variant={typeBadges[mov.tipo]}>
+                                            {typeLabels[mov.tipo]}
+                                        </Badge>
+                                    </td>
+                                    <td>
+                                        <div className="product-info">
+                                            <div className="product-details">
+                                                <div className="product-name">{product?.nombre || 'Producto'}</div>
+                                                <div className="product-code">{product?.codigo_visible || mov.codigo_producto}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style={{ color: colorClass ? `var(--color-${colorClass})` : 'inherit', fontWeight: 600 }}>
+                                            {sign}{Helpers.formatNumber(mov.cantidad, 2)}
+                                        </span>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                                            {product?.unidad_medida?.toLowerCase()}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span style={{ color: 'var(--text-muted)' }}>
+                                            {mov.id_bodega_origen ? Helpers.getWarehouseName(mov.id_bodega_origen) : 'Externo'}
+                                        </span>
+                                        <span style={{ margin: '0 4px' }}>→</span>
+                                        <span>
+                                            {mov.id_bodega_destino ? Helpers.getWarehouseName(mov.id_bodega_destino) : 'Cliente'}
+                                        </span>
+                                    </td>
+                                    <td>{Helpers.formatDateTime(mov.fechaHoraSolicitud)}</td>
+                                    <td><StatusBadge status={mov.estado} /></td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                {filteredMovements.length === 0 && (
+                    <div className="empty-state" style={{ padding: '60px 20px' }}>
+                        <Icons.History size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
+                        <h3 className="empty-state-title">No hay movimientos</h3>
+                        <p className="empty-state-text">No se encontraron movimientos con los filtros aplicados</p>
+                    </div>
+                )}
+            </Card>
+        </MainLayout>
+    );
+}
