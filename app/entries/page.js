@@ -5,15 +5,16 @@ import { MainLayout } from '../components/layout';
 import { Card, Button, Icons, Badge, StatusBadge } from '../components/ui';
 import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { DB } from '../lib/db';
+import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
-import { MockData } from '../lib/mockData';
 
 export default function EntriesPage() {
     const [showForm, setShowForm] = useState(false);
     const [entries, setEntries] = useState([]);
+    const [products, setProducts] = useState([]); // Loaded from DB
     const { openModal, closeModal } = useModal();
     const { showToast } = useToast();
+    const [isLoading, setIsLoading] = useState(true);
 
     // Form state
     const [warehouse, setWarehouse] = useState('1');
@@ -22,23 +23,36 @@ export default function EntriesPage() {
     const [notes, setNotes] = useState('');
     const [unit, setUnit] = useState('');
 
-    const products = DB.getAllProducts();
-
     useEffect(() => {
-        loadEntries();
+        loadData();
     }, []);
 
-    const loadEntries = () => {
-        const movements = DB.getAllMovements()
-            .filter(m => m.tipo === 'ENT' && m.estado !== 'R')
-            .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
-        setEntries(movements);
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [movements, fetchedProducts] = await Promise.all([
+                DB.getAllMovements(),
+                DB.getAllProducts()
+            ]);
+
+            const entMoves = movements
+                .filter(m => m.tipo === 'ENT')
+                .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud));
+
+            setEntries(entMoves);
+            setProducts(fetchedProducts || []);
+        } catch (error) {
+            console.error("Error loading entries data:", error);
+            showToast('Error', 'No se pudieron cargar los datos', 'error');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleProductChange = (e) => {
         const id = e.target.value;
         setProductId(id);
-        const product = DB.getProductById(id);
+        const product = products.find(p => p.id === id || p.codigo_producto === id);
         if (product) {
             setUnit(product.unidad_medida || '');
         } else {
@@ -53,7 +67,7 @@ export default function EntriesPage() {
         return {};
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!productId || !quantity || parseFloat(quantity) <= 0) {
@@ -61,41 +75,52 @@ export default function EntriesPage() {
             return;
         }
 
-        const product = DB.getProductById(productId);
+        const product = products.find(p => p.id === productId || p.codigo_producto === productId);
         const currentUser = getCurrentUser();
+        // Assuming roles are simple strings. Adjust if object.
         const canCreateDirect = currentUser.rol === 'ADMIN' || currentUser.rol === 'SUPERVISOR';
 
-        const movementData = {
-            tipo: 'ENT',
-            codigo_producto: productId,
-            cantidad: parseFloat(quantity),
-            id_bodega_origen: null,
-            id_bodega_destino: parseInt(warehouse),
-            id_solicitante: currentUser.id_usuario || 1,
-            notas: notes,
-            estado: canCreateDirect ? 'C' : 'P',
-        };
+        setIsLoading(true);
+        try {
+            const entryData = {
+                cantidad: parseFloat(quantity),
+                id_bodega_destino: parseInt(warehouse),
+                id_solicitante: currentUser.id_usuario || 1, // Fallback to 1 if not logged in (dev)
+                id_responsable: currentUser.id_usuario || 1,
+                notas: notes,
+                estado: canCreateDirect ? 'C' : 'P',
+                codigo_producto: product.codigo_producto // Ensure we use the raw code
+            };
 
-        const result = DB.createMovement(movementData);
+            await DB.createEntry(entryData);
 
-        if (canCreateDirect) {
-            showToast('Entrada Registrada', `${result.codigo_movimiento}: ${quantity} ${product?.unidad_medida?.toLowerCase()} ingresados a ${Helpers.getWarehouseName(parseInt(warehouse))}`, 'success');
-        } else {
-            showToast('Solicitud Enviada', 'Solicitud de entrada enviada para aprobación', 'info');
+            if (canCreateDirect) {
+                showToast('Entrada Registrada', `${quantity} ${product?.unidad_medida?.toLowerCase() || ''} ingresados a ${warehouse === '1' ? 'Bodega Principal' : 'Bodega Inst.'}`, 'success');
+            } else {
+                showToast('Solicitud Enviada', 'Solicitud de entrada enviada para aprobación', 'info');
+            }
+
+            // Reset form
+            setProductId('');
+            setQuantity('');
+            setNotes('');
+            setUnit('');
+            setShowForm(false);
+
+            // Reload
+            await loadData();
+        } catch (error) {
+            console.error("Error creating entry:", error);
+            showToast('Error', 'No se pudo registrar la entrada', 'error');
+        } finally {
+            setIsLoading(false);
         }
-
-        // Reset form
-        setProductId('');
-        setQuantity('');
-        setNotes('');
-        setUnit('');
-        setShowForm(false);
-        loadEntries();
     };
 
     const showEntryDetails = (entry) => {
-        const product = Helpers.getProduct(entry.codigo_producto);
-        const creador = DB.getUserById(entry.id_solicitante);
+        // Product might be populated in entry or found in list
+        const product = entry.producto || products.find(p => p.codigo_producto === entry.codigo_producto);
+        const creador = entry.solicitante;
 
         openModal(
             'Detalle de Entrada',
@@ -130,7 +155,7 @@ export default function EntriesPage() {
                     </div>
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Bodega Destino</div>
-                        <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{Helpers.getWarehouseName(entry.id_bodega_destino)}</div>
+                        <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{entry.bodega_destino?.nombre || (entry.id_bodega_destino === 1 ? 'Principal' : 'Instrumentacion')}</div>
                     </div>
                     <div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '5px' }}>Registrado por</div>
@@ -191,7 +216,7 @@ export default function EntriesPage() {
                             <select value={productId} onChange={handleProductChange} required>
                                 <option value="">Seleccionar producto...</option>
                                 {products.map(p => (
-                                    <option key={p.id} value={p.id}>
+                                    <option key={p.id} value={p.codigo_producto}>
                                         {p.codigo_visible} - {p.nombre}
                                     </option>
                                 ))}
@@ -227,9 +252,9 @@ export default function EntriesPage() {
                             <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                                 Cancelar
                             </Button>
-                            <Button type="submit" variant="success">
+                            <Button type="submit" variant="success" disabled={isLoading}>
                                 <Icons.Check size={18} />
-                                Registrar Entrada
+                                {isLoading ? 'Registrando...' : 'Registrar Entrada'}
                             </Button>
                         </div>
                     </form>
@@ -253,9 +278,13 @@ export default function EntriesPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {entries.map(entry => {
-                            const product = Helpers.getProduct(entry.codigo_producto);
+                        {isLoading ? (
+                            <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Cargando...</td></tr>
+                        ) : entries.map(entry => {
+                            const product = entry.producto || products.find(p => p.codigo_producto === entry.codigo_producto);
                             const isPending = entry.estado === 'P';
+                            const bodegaName = entry.bodega_destino?.nombre || (entry.id_bodega_destino === 1 ? 'Principal' : 'Instrumentacion');
+
                             return (
                                 <tr key={entry.id_movimiento} onClick={() => showEntryDetails(entry)} style={{ cursor: 'pointer' }}>
                                     <td>
@@ -277,7 +306,7 @@ export default function EntriesPage() {
                                         <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>+{Helpers.formatNumber(entry.cantidad, 2)}</span>
                                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>{product?.unidad_medida?.toLowerCase()}</span>
                                     </td>
-                                    <td>{Helpers.getWarehouseName(entry.id_bodega_destino)}</td>
+                                    <td>{bodegaName}</td>
                                     <td>{Helpers.formatDateTime(entry.fechaHoraSolicitud)}</td>
                                     <td><StatusBadge status={entry.estado} /></td>
                                 </tr>
@@ -285,7 +314,7 @@ export default function EntriesPage() {
                         })}
                     </tbody>
                 </table>
-                {entries.length === 0 && (
+                {!isLoading && entries.length === 0 && (
                     <div className="empty-state" style={{ padding: '60px 20px' }}>
                         <Icons.ArrowDown size={48} style={{ color: 'var(--text-muted)', marginBottom: '16px' }} />
                         <h3 className="empty-state-title">No hay entradas registradas</h3>

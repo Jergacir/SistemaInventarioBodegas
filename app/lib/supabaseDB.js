@@ -484,7 +484,62 @@ export const SupabaseDB = {
       .single();
 
     if (error) throw error;
+
+    // If approving a movement, we should also update stock if it's an entry
+    if (data.tipo === 'ENT' && data.estado === 'C' && updates.estado === 'C') { // strictly if it's being marked as completed just now
+      // Fetch current stock
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', data.codigo_producto)
+        .eq('id_bodega', data.id_bodega_destino)
+        .single();
+
+      const newStock = (currentInv?.stock || 0) + data.cantidad;
+
+      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_destino);
+    }
+
     return data;
+  },
+
+  async createEntry(entryData) {
+    // 1. Create the movement
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .insert({
+        codigo_movimiento: `ENT-${Date.now()}`, // Temporary gen
+        tipo: 'ENT',
+        cantidad: entryData.cantidad,
+        estado: entryData.estado || 'P',
+        notas: entryData.notas,
+        id_responsable: entryData.id_responsable, // Created by
+        id_solicitante: entryData.id_solicitante, // Requested by
+        codigo_producto: entryData.codigo_producto,
+        id_bodega_origen: null, // Entries strictly have no origin internal warehouse
+        id_bodega_destino: entryData.id_bodega_destino,
+        fechaHoraSolicitud: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // 2. If status is Completed ('C'), update stock immediately
+    if (movement.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', entryData.codigo_producto)
+        .eq('id_bodega', entryData.id_bodega_destino)
+        .single();
+
+      const newStock = (currentInv?.stock || 0) + parseFloat(movement.cantidad);
+
+      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', entryData.codigo_producto).eq('id_bodega', entryData.id_bodega_destino);
+    }
+
+    return movement;
   },
 
   // ==================== CATEGORÍAS ====================
