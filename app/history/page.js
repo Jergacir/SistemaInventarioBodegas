@@ -438,7 +438,7 @@ export default function HistoryPage() {
                                                         onClick={() => handleDelete(mov)}
                                                         title="Eliminar registro Permanentemente"
                                                     >
-                                                        <Icons.Trash size={16} />
+                                                        <Icons.Delete size={16} />
                                                     </Button>
                                                 </td>
                                             )}
