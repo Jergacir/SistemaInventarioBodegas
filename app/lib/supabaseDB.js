@@ -719,6 +719,28 @@ export const SupabaseDB = {
       await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', exitData.codigo_producto).eq('id_bodega', exitData.id_bodega_origen);
     }
 
+    // 4. Handle Transfer (Traspaso) Logic
+    if (exitData.isTransfer && parseInt(exitData.id_bodega_origen) === 1) {
+      // Automatically create Entry to Instrumentation (ID 2)
+      // Only if it was from Principal (ID 1) as requested
+      try {
+        await this.createEntry({
+          cantidad: exitData.cantidad,
+          codigo_producto: exitData.codigo_producto,
+          id_bodega_destino: 2, // Bodega Instrumentación
+          estado: exitData.estado, // Same status (likely 'C')
+          notas: `Traspaso automático desde Salida ${newCode}. ${exitData.notas || ''}`.trim(),
+          id_responsable: exitData.id_responsable,
+          id_solicitante: exitData.id_solicitante
+        });
+        console.log("Auto-transfer entry created successfully");
+      } catch (transferError) {
+        console.error("Error creating auto-transfer entry:", transferError);
+        // Non-blocking error? Or should we revert? 
+        // For now, log it. User requested functionality, but fallback safety is good.
+      }
+    }
+
     return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
   },
 

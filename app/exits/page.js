@@ -27,6 +27,7 @@ export default function ExitsPage() {
     const [users, setUsers] = useState([]);
     const [requesterMode, setRequesterMode] = useState('select'); // 'select' or 'text'
     const [fullInventory, setFullInventory] = useState([]);
+    const [isTransfer, setIsTransfer] = useState(false);
 
     const [currentUser, setCurrentUser] = useState(null);
 
@@ -158,7 +159,10 @@ export default function ExitsPage() {
 
                 id_responsable: currentUserLocal.id_usuario || 1,
                 notas: `${notes} - Solicitado por: ${requester}`,
+                id_responsable: currentUserLocal.id_usuario || 1,
+                notas: `${notes} - Solicitado por: ${requester}`,
                 estado: canCreateDirect ? 'C' : 'P',
+                isTransfer: isTransfer // Flag for backend to trigger auto-entry
             };
 
             // Try to find if requester is a known user
@@ -292,12 +296,46 @@ export default function ExitsPage() {
                         <div className="form-row">
                             <div className="form-group">
                                 <label>Bodega Origen *</label>
-                                <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)} required>
+                                <select value={warehouse} onChange={(e) => {
+                                    setWarehouse(e.target.value);
+                                    if (e.target.value !== '1') setIsTransfer(false); // Reset transfer if not Principal
+                                }} required>
                                     <option value="2">Bodega Instrumentación</option>
                                     <option value="1">Bodega Principal</option>
                                 </select>
                             </div>
                         </div>
+
+                        {/* Transfer Checkbox - Only for Principal */}
+                        {warehouse === '1' && (
+                            <div style={{
+                                marginBottom: '20px',
+                                padding: '15px',
+                                background: 'rgba(56, 189, 248, 0.1)',
+                                border: '1px solid var(--color-info)',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    id="isTransfer"
+                                    checked={isTransfer}
+                                    onChange={(e) => setIsTransfer(e.target.checked)}
+                                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                                />
+                                <div>
+                                    <label htmlFor="isTransfer" style={{ fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}>
+                                        Traspaso a Instrumentación
+                                    </label>
+                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                        Si se marca, se generará una <strong>ENTRADA</strong> automática en Bodega Instrumentación además de esta salida.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="form-group">
                             <label>Producto *</label>
                             <select value={productId} onChange={handleProductChange} required>
@@ -401,9 +439,9 @@ export default function ExitsPage() {
                             <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                                 Cancelar
                             </Button>
-                            <Button type="submit" variant="danger" disabled={isLoading}>
+                            <Button type="submit" variant={isTransfer ? "info" : "danger"} disabled={isLoading}>
                                 <Icons.ArrowUp size={18} />
-                                {isLoading ? 'Registrando...' : 'Registrar Salida'}
+                                {isLoading ? 'Registrando...' : (isTransfer ? 'Registrar Traspaso' : 'Registrar Salida')}
                             </Button>
                         </div>
                     </form>
