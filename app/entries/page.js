@@ -194,7 +194,27 @@ export default function EntriesPage() {
                     </div>
                 )}
 
-                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between' }}>
+                    {getCurrentUser()?.rol === 'DEVELOPER' && (
+                        <Button
+                            variant="danger"
+                            onClick={async () => {
+                                if (confirm('¿ESTÁS SEGURO? Esta acción es irreversible.\n\nEliminará el movimiento permanentemente.\nSi estaba "Completada", se revertirá el stock automáticamente.')) {
+                                    try {
+                                        await DB.deleteMovement(entry.id_movimiento);
+                                        showToast('Eliminado', 'El movimiento ha sido eliminado permanentemente', 'success');
+                                        closeModal();
+                                        loadData();
+                                    } catch (e) {
+                                        console.error(e);
+                                        showToast('Error', 'No se pudo eliminar: ' + e.message, 'error');
+                                    }
+                                }
+                            }}
+                        >
+                            ELIMINAR (DEV)
+                        </Button>
+                    )}
                     <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
                 </div>
             </div>
