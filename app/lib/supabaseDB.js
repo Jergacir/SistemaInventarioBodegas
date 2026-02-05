@@ -591,6 +591,67 @@ export const SupabaseDB = {
     return true;
   },
 
+  async deleteMovement(id) {
+    // 1. Get movement details to check status and stock impact
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .select("*")
+      .eq("id_movimiento", id)
+      .single();
+
+    if (error) throw error;
+    if (!movement) throw new Error("Movimiento no encontrado");
+
+    // 2. Undo Stock IF Completed
+    if (movement.estado === 'C') {
+      if (movement.tipo === 'ENT') {
+        // Entry added stock -> Subtract it back
+        const { data: invDest } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_destino)
+          .single();
+
+        if (invDest) {
+          const newStock = Math.max(0, invDest.stock - movement.cantidad);
+          await supabase.from('inventario')
+            .update({ stock: newStock })
+            .eq('codigo_producto', movement.codigo_producto)
+            .eq('id_bodega', movement.id_bodega_destino);
+        }
+      } else if (movement.tipo === 'SAL') {
+        // Exit removed stock -> Add it back
+        const { data: invOrig } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_origen)
+          .single();
+
+        if (invOrig) {
+          const newStock = invOrig.stock + movement.cantidad;
+          await supabase.from('inventario')
+            .update({ stock: newStock })
+            .eq('codigo_producto', movement.codigo_producto)
+            .eq('id_bodega', movement.id_bodega_origen);
+        }
+      }
+      // Transfers would need handling if we had them as single records, but now they are split into Exit+Entry,
+      // so deleting one half (the Exit) adds back to Origin. The Entry half is separate.
+      // User might need to delete BOTH to fully revert a transfer, but that's expected behavior for split records.
+    }
+
+    // 3. Delete record
+    const { error: deleteError } = await supabase
+      .from('movimiento')
+      .delete()
+      .eq('id_movimiento', id);
+
+    if (deleteError) throw deleteError;
+    return true;
+  },
+
   async createEntry(entryData) {
     // Generate sequential ID
     // 1. Get last entry

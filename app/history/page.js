@@ -21,9 +21,14 @@ export default function HistoryPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [movements, setMovements] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(null);
 
     // Set default dates on mount - REMOVED to show all history by default
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const saved = sessionStorage.getItem('currentUser');
+            if (saved) setCurrentUser(JSON.parse(saved));
+        }
         loadMovements();
     }, []);
 
@@ -54,6 +59,21 @@ export default function HistoryPage() {
             } catch (error) {
                 console.error("Error reverting movement:", error);
                 showToast('Error', 'No se pudo revertir el movimiento.', 'error');
+            }
+        }
+    };
+
+    const handleDelete = async (movement) => {
+        const confirmMsg = `ADVERTENCIA CRÍTICA: Eliminación Permanente\n\nEstás a punto de eliminar el movimiento ${movement.codigo_movimiento}.\n\nSi el movimiento está COMPLETADO, esta acción REVERTIRÁ automáticamente los cambios de stock asociados para mantener la integridad del inventario.\n\n¿Deseas continuar?`;
+
+        if (window.confirm(confirmMsg)) {
+            try {
+                await DB.deleteMovement(movement.id_movimiento);
+                showToast('Eliminado', 'Registro eliminado correctamente.', 'success');
+                loadMovements();
+            } catch (error) {
+                console.error("Error deleting movement:", error);
+                showToast('Error', 'No se pudo eliminar el registro.', 'error');
             }
         }
     };
@@ -365,6 +385,7 @@ export default function HistoryPage() {
                                     <th style={{ width: '180px' }}>Origen → Destino</th>
                                     <th style={{ width: '150px' }}>Fecha</th>
                                     <th style={{ width: '110px' }}>Estado</th>
+                                    {currentUser?.rol === 'ADMIN' && <th style={{ width: '50px' }}></th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -409,6 +430,18 @@ export default function HistoryPage() {
                                             </td>
                                             <td>{Helpers.formatDateTime(mov.fechaHoraSolicitud)}</td>
                                             <td><StatusBadge status={mov.estado} /></td>
+                                            {currentUser?.rol === 'ADMIN' && (
+                                                <td onClick={(e) => e.stopPropagation()}>
+                                                    <Button
+                                                        variant="text"
+                                                        style={{ color: 'var(--color-danger)', padding: '4px' }}
+                                                        onClick={() => handleDelete(mov)}
+                                                        title="Eliminar registro Permanentemente"
+                                                    >
+                                                        <Icons.Trash size={16} />
+                                                    </Button>
+                                                </td>
+                                            )}
                                         </tr>
                                     );
                                 })}
