@@ -199,6 +199,7 @@ export const SupabaseDB = {
       nombre_categoria: product.categoria?.nombre_categoria || "Desconocida",
       categoria: product.categoria?.nombre_categoria || "Desconocida",
       marca: product.marca?.nombre || "Desconocida",
+      descripcion: product.descripcion || '', // Add description
       unidad_medida: product.unidad,
       imagen_url: product.url_imagen,
 
@@ -295,8 +296,9 @@ export const SupabaseDB = {
     const payload = {
       codigo_producto: productData.codigo_visible || productData.id,
       nombre: productData.nombre,
+      descripcion: productData.descripcion, // Add description field
       unidad: productData.unidad_medida || productData.unidad,
-      url_imagen: productData.imagen_url,
+      url_imagen: null, // Removed per user request
       stock_minimo: productData.stock_minimo,
       id_marca: brandId,
       id_categoria: categoryId,

@@ -140,21 +140,18 @@ export default function ProductsPage() {
                     </div>
                     <div>
                         <div style={{
-                            height: '180px',
+                            padding: '16px',
                             borderRadius: '8px',
                             border: '1px solid var(--border-light)',
                             background: 'var(--bg-subtle)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                            height: '180px',
                             marginBottom: '16px',
-                            overflow: 'hidden'
+                            overflowY: 'auto'
                         }}>
-                            {product.imagen_url ? (
-                                <img src={product.imagen_url} alt={product.nombre} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            ) : (
-                                <Icons.Items size={64} style={{ color: 'var(--text-muted)' }} />
-                            )}
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</div>
+                            <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+                                {product.descripcion || 'Sin descripción disponible.'}
+                            </div>
                         </div>
                         <div style={{
                             background: isLow ? 'rgba(239,68,68,0.1)' : 'var(--bg-subtle)',
@@ -179,11 +176,12 @@ export default function ProductsPage() {
                             </div>
                         </div>
                     </div>
+
                 </div>
                 <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end' }}>
                     <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
                 </div>
-            </div>,
+            </div >,
             'xl'
         );
     };
@@ -382,17 +380,15 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
     const [formData, setFormData] = useState({
         codigo_visible: product?.codigo_visible || '',
         nombre: product?.nombre || '',
+        descripcion: product?.descripcion || '',
         categoria: product?.categoria || '',
         marca: product?.marca || '',
         unidad_medida: product?.unidad_medida || '',
         stock_minimo: product?.stock_minimo || 0,
         ubicacion_principal: product?.ubicacion_principal || '',
-        ubicacion_instrumentacion: product?.ubicacion_instrumentacion || '',
-        imagen_url: product?.imagen_url || ''
+        ubicacion_instrumentacion: product?.ubicacion_instrumentacion || ''
     });
 
-    const [imagePreview, setImagePreview] = useState(product?.imagen_url || '');
-    const fileInputRef = useRef(null);
     const [categoryMode, setCategoryMode] = useState('select');
     const [brandMode, setBrandMode] = useState('select');
 
@@ -412,23 +408,6 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
     const types = ['EST', 'RET', 'DSC'];
     const rows = Array.from({ length: 30 }, (_, i) => (i + 1).toString().padStart(2, '0'));
     const levels = Array.from({ length: 4 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (file.size > 500 * 1024) {
-            alert('La imagen debe ser menor a 500KB');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            setImagePreview(event.target.result);
-            setFormData({ ...formData, imagen_url: event.target.result });
-        };
-        reader.readAsDataURL(file);
-    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -579,6 +558,24 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
                 />
             </div>
 
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>Descripción</label>
+                <textarea
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    placeholder="Detalles adicionales del producto..."
+                    style={{
+                        width: '100%',
+                        minHeight: '80px',
+                        padding: '10px',
+                        borderRadius: 'var(--radius-default)',
+                        border: '1px solid var(--border-input)',
+                        fontFamily: 'inherit',
+                        resize: 'vertical'
+                    }}
+                />
+            </div>
+
 
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
@@ -648,64 +645,7 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
                 </div>
             </div>
 
-            {/* Image Upload */}
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-                <label>Imagen del Producto</label>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'start' }}>
-                    <div style={{
-                        width: '100px',
-                        height: '100px',
-                        borderRadius: '8px',
-                        border: '2px dashed var(--border-default)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'var(--bg-subtle)',
-                        overflow: 'hidden',
-                        flexShrink: 0
-                    }}>
-                        {imagePreview ? (
-                            <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                            <Icons.Items size={32} style={{ color: 'var(--text-muted)' }} />
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            accept="image/*"
-                            onChange={handleImageChange}
-                            style={{ display: 'none' }}
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => fileInputRef.current?.click()}
-                            style={{ width: '100%', marginBottom: '8px' }}
-                        >
-                            Seleccionar Imagen
-                        </Button>
-                        {imagePreview && (
-                            <Button
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => {
-                                    setImagePreview('');
-                                    setFormData({ ...formData, imagen_url: '' });
-                                }}
-                                style={{ width: '100%' }}
-                            >
-                                Quitar imagen
-                            </Button>
-                        )}
-                        <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Máximo 500KB. Formatos: JPG, PNG, WEBP
-                        </span>
-                    </div>
-                </div>
-            </div>
+
 
             {/* Footer */}
             <div style={{
