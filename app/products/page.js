@@ -386,12 +386,8 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
         unidad_medida: product?.unidad_medida || '',
         stock_minimo: product?.stock_minimo || 0,
         ubicacion_principal: product?.ubicacion_principal || '',
-        ubicacion_instrumentacion: product?.ubicacion_instrumentacion || '',
-        stock_principal: '',
-        stock_instrumentacion: ''
+        ubicacion_instrumentacion: product?.ubicacion_instrumentacion || ''
     });
-
-    const [showStockInputs, setShowStockInputs] = useState(false);
 
     const [categoryMode, setCategoryMode] = useState('select');
     const [brandMode, setBrandMode] = useState('select');
@@ -427,17 +423,12 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
             ubicacion_instrumentacion = `${instLoc.type}-${instLoc.row}-${instLoc.level}`;
         }
 
-        const payload = {
+        onSave({
             ...formData,
             ubicacion_principal,
             ubicacion_instrumentacion,
-            stock_minimo: parseFloat(formData.stock_minimo) || 0,
-            initial_stock: showStockInputs ? {
-                stock_principal: formData.stock_principal === '' ? null : Number(formData.stock_principal),
-                stock_instrumentacion: formData.stock_instrumentacion === '' ? null : Number(formData.stock_instrumentacion)
-            } : null
-        };
-        onSave(payload);
+            stock_minimo: parseFloat(formData.stock_minimo) || 0
+        });
     };
 
     return (
@@ -652,49 +643,6 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
                         </select>
                     </div>
                 </div>
-            </div>
-
-            {/* Initial Stock Configuration (Optional) */}
-            <div style={{ marginBottom: '24px', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showStockInputs ? '16px' : '0' }}>
-                    <div>
-                        <div style={{ fontSize: '14px', fontWeight: 600 }}>Configuración de Stock Inicial</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Opcional: Establecer stock al crear/editar</div>
-                    </div>
-                    <Button
-                        type="button"
-                        variant={showStockInputs ? "secondary" : "outline"}
-                        size="sm"
-                        onClick={() => setShowStockInputs(!showStockInputs)}
-                    >
-                        {showStockInputs ? "Ocultar Stock" : "Definir Stock Inicial"}
-                    </Button>
-                </div>
-
-                {showStockInputs && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', animation: 'fadeIn 0.3s ease' }}>
-                        <div className="form-group">
-                            <label>Stock Bodega Principal</label>
-                            <input
-                                type="number"
-                                value={formData.stock_principal}
-                                onChange={(e) => setFormData({ ...formData, stock_principal: e.target.value })}
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Stock Bodega Instrumentación</label>
-                            <input
-                                type="number"
-                                value={formData.stock_instrumentacion}
-                                onChange={(e) => setFormData({ ...formData, stock_instrumentacion: e.target.value })}
-                                placeholder="0"
-                                min="0"
-                            />
-                        </div>
-                    </div>
-                )}
             </div>
 
 
