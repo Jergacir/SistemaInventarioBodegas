@@ -53,7 +53,7 @@ export default function InventoryPage() {
                     min_stock: product.stock_minimo || 0,
                     location: selectedWarehouse === 1 ? product.ubicacion_principal : product.ubicacion_instrumentacion,
                     brand: product.marca || 'Generico',
-                    description: product.descripcion,
+                    imagen_url: product.imagen_url,
                     is_low: inv.stock <= (product.stock_minimo || 0)
                 };
             })
@@ -135,18 +135,21 @@ export default function InventoryPage() {
                     </div>
                     <div>
                         <div style={{
-                            padding: '16px',
+                            height: '180px',
                             borderRadius: '8px',
                             border: '1px solid var(--border-light)',
                             background: 'var(--bg-subtle)',
-                            height: '180px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             marginBottom: '16px',
-                            overflowY: 'auto'
+                            overflow: 'hidden'
                         }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</div>
-                            <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
-                                {product.descripcion || 'Sin descripción disponible.'}
-                            </div>
+                            {product.imagen_url ? (
+                                <img src={product.imagen_url} alt={product.nombre} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                            ) : (
+                                <Icons.Items size={64} style={{ color: 'var(--text-muted)' }} />
+                            )}
                         </div>
                         <div style={{
                             background: isLow ? 'rgba(239,68,68,0.1)' : 'var(--bg-subtle)',

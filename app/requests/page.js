@@ -56,7 +56,7 @@ export default function RequestsPage() {
 
     const canApprove = () => {
         const user = getCurrentUser();
-        return ['ADMIN'].includes(user.rol);
+        return ['ADMIN', 'SUPERVISOR'].includes(user.rol);
     };
 
     const handleApprove = async (item) => {
@@ -190,7 +190,7 @@ export default function RequestsPage() {
                     </div>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>
-                        Solo los administradores pueden gestionar solicitudes.
+                        Solo supervisores y administradores pueden aprobar solicitudes.
                     </div>
                 )}
             </div>
