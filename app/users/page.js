@@ -420,10 +420,10 @@ function UserForm({ user, isEdit, onSave, onCancel }) {
           <option value="O">Operador</option>
           <option value="S">Supervisor</option>
           <option value="A">Administrador</option>
-          {/* Only developers can assign developer role */}
+          {/* Developers and Admins can assign developer role */}
           {(() => {
             const currentUser = JSON.parse(sessionStorage.getItem("currentUser") || "{}");
-            return currentUser.rol === 'DEVELOPER' ? <option value="D">Desarrollador</option> : null;
+            return (currentUser.rol === 'DEVELOPER' || currentUser.rol === 'ADMIN') ? <option value="D">Desarrollador</option> : null;
           })()}
         </select>
       </div>
