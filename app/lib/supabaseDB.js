@@ -122,7 +122,7 @@ export const SupabaseDB = {
 
   hydrateUser(user) {
     if (!user) return null;
-    const roleMap = { A: "ADMIN", S: "SUPERVISOR", O: "OPERADOR", D: "DEVELOPER" };
+    const roleMap = { A: "ADMIN", S: "SUPERVISOR", O: "OPERADOR" };
     return {
       id_usuario: user.id_usuario,
       nombre_completo: user.nombre_completo,
@@ -534,34 +534,6 @@ export const SupabaseDB = {
 
 
 
-
-  async deleteMovement(id) {
-    const { data: movement, error } = await supabase
-      .from("movimiento")
-      .select("*")
-      .eq("id_movimiento", id)
-      .single();
-
-    if (error) throw error;
-    if (!movement) throw new Error("Movimiento no encontrado");
-
-    // Revert stock changes if completed
-    if (movement.estado === 'C') {
-      // Reuse reversion logic for stock updates
-      await this.revertMovementToPending(id);
-      // Note: revertMovementToPending updates status to 'P', 
-      // we will proceed to delete the row anyway.
-    }
-
-    // Now delete the record
-    const { error: deleteError } = await supabase
-      .from("movimiento")
-      .delete()
-      .eq("id_movimiento", id);
-
-    if (deleteError) throw deleteError;
-    return true;
-  },
 
   async revertMovementToPending(id) {
     const { data: movement, error } = await supabase

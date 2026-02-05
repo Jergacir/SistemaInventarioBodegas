@@ -27,14 +27,14 @@ export const Sidebar = ({ isOpen, toggleSidebar, user }) => {
 
     const navItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'Home', path: '/dashboard' },
-        { id: 'products', label: 'Productos', icon: 'Items', path: '/products', roles: ['ADMIN', 'SUPERVISOR', 'DEVELOPER'] },
+        { id: 'products', label: 'Productos', icon: 'Items', path: '/products', roles: ['ADMIN', 'SUPERVISOR'] },
         { id: 'inventory', label: 'Inventario', icon: 'Inventory', path: '/inventory' },
         { id: 'entries', label: 'Entradas', icon: 'Check', path: '/entries' },
-        { id: 'requests', label: 'Solicitudes', icon: 'File', path: '/requests', roles: ['ADMIN', 'SUPERVISOR', 'DEVELOPER'] },
+        { id: 'requests', label: 'Solicitudes', icon: 'File', path: '/requests', roles: ['ADMIN', 'SUPERVISOR'] },
         // { id: 'transfers', label: 'Transferencias', icon: 'Transfers', path: '/transfers' }, // Disabled per user request
         { id: 'exits', label: 'Salidas', icon: 'Truck', path: '/exits' },
-        { id: 'history', label: 'Historial', icon: 'Movements', path: '/history', roles: ['ADMIN', 'SUPERVISOR', 'DEVELOPER'] },
-        { id: 'users', label: 'Usuarios', icon: 'Users', path: '/users', roles: ['ADMIN', 'DEVELOPER'] },
+        { id: 'history', label: 'Historial', icon: 'Movements', path: '/history', roles: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'users', label: 'Usuarios', icon: 'Users', path: '/users', roles: ['ADMIN'] },
         { id: 'settings', label: 'Configuración', icon: 'Settings', path: '/settings' }
     ];
 

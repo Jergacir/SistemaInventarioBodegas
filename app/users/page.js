@@ -36,7 +36,7 @@ export default function UsersPage() {
 
   const isAdmin = () => {
     const user = getCurrentUser();
-    return user.rol === "ADMIN" || user.rol === "DEVELOPER";
+    return user.rol === "ADMIN";
   };
 
   // Not admin - show restricted access
@@ -65,8 +65,8 @@ export default function UsersPage() {
     );
   }
 
-  const roleMap = { A: "Admin", S: "Supervisor", O: "Operador", D: "Desarrollador" };
-  const roleBadgeMap = { A: "completed", S: "in-transit", O: "pending", D: "cancelled" };
+  const roleMap = { A: "Admin", S: "Supervisor", O: "Operador" };
+  const roleBadgeMap = { A: "completed", S: "in-transit", O: "pending" };
 
   const openUserModal = (userId = null) => {
     const user = userId ? users.find((u) => u.id_usuario == userId) : null;
@@ -345,11 +345,9 @@ function UserForm({ user, isEdit, onSave, onCancel }) {
       ADMIN: "A",
       SUPERVISOR: "S",
       OPERADOR: "O",
-      DEVELOPER: "D",
       A: "A",
       S: "S",
       O: "O",
-      D: "D"
     };
     return rolMap[rol] || "O";
   };
@@ -420,11 +418,6 @@ function UserForm({ user, isEdit, onSave, onCancel }) {
           <option value="O">Operador</option>
           <option value="S">Supervisor</option>
           <option value="A">Administrador</option>
-          {/* Developers and Admins can assign developer role */}
-          {(() => {
-            const currentUser = JSON.parse(sessionStorage.getItem("currentUser") || "{}");
-            return (currentUser.rol === 'DEVELOPER' || currentUser.rol === 'ADMIN') ? <option value="D">Desarrollador</option> : null;
-          })()}
         </select>
       </div>
 
