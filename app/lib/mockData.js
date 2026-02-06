@@ -273,6 +273,9 @@ export const MockData = {
         }
     ],
 
+    // REQUERIMIENTO table
+    REQUERIMIENTO: [],
+
     // --- Settings ---
     SETTINGS: {
         theme: 'dark',
@@ -283,6 +286,7 @@ export const MockData = {
 
     // Helper for generating IDs
     _sequences: {
-        movimiento: 4
+        movimiento: 4,
+        requerimiento: 1
     }
 };

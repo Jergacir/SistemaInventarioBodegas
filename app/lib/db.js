@@ -469,6 +469,69 @@ export const DB = {
     return `${type}-${String(id).padStart(6, "0")}`;
   },
 
+
+  // --- Requirements ---
+  async getRequirements() {
+    return MockData.REQUERIMIENTO.map(req => {
+      const product = MockData.PRODUCTO.find(p => p.codigo_producto === req.codigo_producto);
+      // Join to get names
+      // Solicitante
+      const solicitante = MockData.USUARIO.find(u => u.id_usuario === req.id_solicitante);
+      // Responsable
+      const responsable = req.id_responsable ? MockData.USUARIO.find(u => u.id_usuario === req.id_responsable) : null;
+
+      return {
+        ...req,
+        producto_nombre: req.nombre_producto || product?.nombre || 'Desconocido',
+        marca_nombre: req.marca_texto || 'General',
+        solicitante_nombre: solicitante?.nombre_completo || 'Solicitante Eliminado',
+        responsable_nombre: responsable?.nombre_completo || 'N/A'
+      };
+    });
+  },
+
+  async createRequirement(reqData) {
+    const newId = MockData._sequences.requerimiento++;
+    const newReq = {
+      id_requerimiento: newId,
+      ...reqData,
+      estado: 'P',
+      fechaHoraRequ: new Date().toISOString(),
+      fechaHoraAprobacion: null
+    };
+    MockData.REQUERIMIENTO.push(newReq);
+    return newReq;
+  },
+
+  async updateRequirementStatus(id, newStatus, adminId) {
+    const req = MockData.REQUERIMIENTO.find(r => r.id_requerimiento === id);
+    if (!req) throw new Error("Requerimiento no encontrado");
+
+    req.estado = newStatus;
+    if (newStatus === 'A' || newStatus === 'R') {
+      req.fechaHoraAprobacion = new Date().toISOString();
+      req.id_responsable = adminId;
+    }
+    return req;
+  },
+
+  async revertRequirement(id) {
+    const req = MockData.REQUERIMIENTO.find(r => r.id_requerimiento === id);
+    if (!req) throw new Error("Requerimiento no encontrado");
+
+    req.estado = 'P';
+    req.fechaHoraAprobacion = null;
+    return req;
+  },
+
+  async deleteRequirement(id) {
+    const index = MockData.REQUERIMIENTO.findIndex(r => r.id_requerimiento === id);
+    if (index === -1) throw new Error("Requerimiento no encontrado");
+
+    MockData.REQUERIMIENTO.splice(index, 1);
+    return true;
+  },
+
   // --- Settings ---
   getSettings() {
     return { ...MockData.SETTINGS };

@@ -990,6 +990,17 @@ export const SupabaseDB = {
     }));
   },
 
+  // Eliminar un requerimiento (solo Admin)
+  async deleteRequirement(id) {
+    const { error } = await supabase
+      .from("requerimiento")
+      .delete()
+      .eq("id_requerimiento", id);
+
+    if (error) throw error;
+    return true;
+  },
+
   async createRequirement(reqData) {
     // reqData: { nombre_producto, codigo_producto, marca_texto, id_marca, descripcion, id_solicitante, id_responsable }
 

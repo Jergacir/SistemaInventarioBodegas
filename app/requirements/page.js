@@ -137,6 +137,20 @@ export default function RequirementsPage() {
         }
     };
 
+    const handleDelete = async (req) => {
+        if (window.confirm('¿ELIMINAR este requerimiento? Esta acción no se puede deshacer.')) {
+            try {
+                await DB.deleteRequirement(req.id_requerimiento);
+                showToast('Eliminado', 'Requerimiento eliminado correctamente', 'success');
+                closeModal();
+                loadInitialData();
+            } catch (error) {
+                console.error("Delete failed:", error);
+                showToast('Error', 'No se pudo eliminar el requerimiento', 'error');
+            }
+        }
+    };
+
     const openCreateModal = () => {
         openModal(
             'Nuevo Requerimiento',
@@ -160,6 +174,7 @@ export default function RequirementsPage() {
                 onApprove={() => handleApprove(req)}
                 onReject={() => handleReject(req)}
                 onRevert={() => handleRevert(req)}
+                onDelete={() => handleDelete(req)}
                 closeModal={closeModal}
             />
         );
@@ -331,7 +346,7 @@ export default function RequirementsPage() {
 }
 
 // Sub-component for Detailed View (Modal)
-const RequirementDetailModal = ({ req, currentUser, onApprove, onReject, onRevert, closeModal }) => {
+const RequirementDetailModal = ({ req, currentUser, onApprove, onReject, onRevert, onDelete, closeModal }) => {
     const isAdmin = currentUser?.rol === 'ADMIN';
 
     return (
@@ -343,51 +358,48 @@ const RequirementDetailModal = ({ req, currentUser, onApprove, onReject, onRever
                     {req.codigo_producto && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Código: {req.codigo_visible}</div>}
                 </div>
                 <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Marca</label>
-                    <div style={{ fontSize: '14px' }}>{req.marca_nombre}</div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Estado</label>
+                    <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
                 </div>
                 <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Solicitante</label>
-                    <div style={{ fontSize: '14px' }}>{req.solicitante_nombre}</div>
+                    <div>{req.solicitante_nombre}</div>
                 </div>
                 <div>
-                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Fecha Solicitud</label>
-                    <div style={{ fontSize: '14px' }}>{Helpers.formatDateTime(req.fechaHoraRequ)}</div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Fecha</label>
+                    <div>{Helpers.formatDateTime(req.fechaHoraRequ)}</div>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Descripción / Detalles</label>
-                    <div style={{ padding: '10px', background: 'var(--bg-subtle)', borderRadius: '6px', fontSize: '14px', minHeight: '60px' }}>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Detalles</label>
+                    <div style={{ padding: '10px', background: 'var(--bg-subtle)', borderRadius: '6px', fontSize: '14px' }}>
                         {req.descripcion || 'Sin descripción adicional.'}
                     </div>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Estado Actual</label>
-                    <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
-                    {req.responsable_nombre && (
-                        <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Gestionado por: {req.responsable_nombre}
-                        </div>
-                    )}
                 </div>
             </div>
 
             {isAdmin && (
-                <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                    {req.estado === 'P' && (
-                        <>
-                            <Button variant="danger" onClick={onReject}>
-                                <Icons.Close size={16} /> Rechazar
+                <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Button variant="danger" onClick={onDelete} style={{ background: 'transparent', border: '1px solid var(--color-danger)', color: 'var(--color-danger)' }}>
+                        <Icons.Trash size={16} /> Eliminar
+                    </Button>
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        {req.estado === 'P' && (
+                            <>
+                                <Button variant="danger" onClick={onReject}>
+                                    <Icons.Close size={16} /> Rechazar
+                                </Button>
+                                <Button variant="success" onClick={onApprove}>
+                                    <Icons.Check size={16} /> Aprobar
+                                </Button>
+                            </>
+                        )}
+                        {req.estado !== 'P' && (
+                            <Button variant="outline" onClick={onRevert}>
+                                <Icons.Refresh size={16} /> Revertir a Pendiente
                             </Button>
-                            <Button variant="success" onClick={onApprove}>
-                                <Icons.Check size={16} /> Aprobar
-                            </Button>
-                        </>
-                    )}
-                    {req.estado !== 'P' && (
-                        <Button variant="outline" onClick={onRevert}>
-                            <Icons.Refresh size={16} /> Revertir a Pendiente
-                        </Button>
-                    )}
+                        )}
+                    </div>
                 </div>
             )}
 
