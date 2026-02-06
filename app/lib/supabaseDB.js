@@ -960,4 +960,101 @@ export const SupabaseDB = {
     if (typeof window === "undefined") return;
     localStorage.setItem("appSettings", JSON.stringify(settings));
   },
+
+  // ==================== REQUERIMIENTOS ====================
+  async getRequirements() {
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .select(
+        `
+              *,
+              producto(nombre),
+              marca(nombre),
+              solicitante: usuario!id_solicitante(nombre_completo),
+              responsable: usuario!id_responsable(nombre_completo)
+        `
+      )
+      .order("fechahora_requerimiento", { ascending: false });
+
+    if (error) throw error;
+
+    return data.map(r => ({
+      ...r,
+      fechaHoraRequ: r.fechahora_requerimiento,
+      fechaHoraAprob: r.fechahora_aprobacion,
+      producto_nombre: r.producto?.nombre || r.nombre_producto, // Use relation or fallback text
+      marca_nombre: r.marca?.nombre || r.marca_texto,         // Use relation or fallback text
+      solicitante_nombre: r.solicitante?.nombre_completo,
+      responsable_nombre: r.responsable?.nombre_completo
+    }));
+  },
+
+  async createRequirement(reqData) {
+    // reqData: { nombre_producto, codigo_producto, marca_texto, id_marca, descripcion, id_solicitante, id_responsable }
+
+    // Explicitly handle IDs vs Text based on user rules:
+    // If selected from catalog, sending ID. If manual, sending text and NULL ID.
+
+    const payload = {
+      nombre_producto: reqData.nombre_producto,
+      codigo_producto: reqData.codigo_visible || reqData.codigo_producto || null, // Ensure null if 0 or undefined
+      marca_texto: reqData.marca_texto,
+      id_marca: reqData.id_marca || null,
+      descripcion: reqData.descripcion,
+      id_solicitante: reqData.id_solicitante,
+      id_responsable: reqData.id_responsable, // Creator
+      estado: 'P',
+      fechahora_requerimiento: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateRequirementStatus(id, newStatus, adminId) {
+    if (!['A', 'R'].includes(newStatus)) throw new Error("Estado inválido");
+
+    const updates = {
+      estado: newStatus,
+      fechahora_aprobacion: new Date().toISOString()
+      // Note: we track who approved? The table schema didn't technically allow 'approved_by' separate from 'responsable' (creator).
+      // The user prompt said "id_responsable" in table definition. 
+      // Usually "id_responsable" is "Assigned To" or "Approved By".
+      // But in the user rules: "Operadores: Solo pueden generar requerimientos para sí mismos (id_solicitante bloqueado a su propio ID)."
+      // And "id_responsable" was not explicitly defined as "approver".
+      // However, typical flow is Requester -> Approver.
+      // If `id_responsable` was set at creation, it might be the "Manager" responsible for the *request*.
+      // We will leave `id_responsable` as is (set at creation) unless the user wants to track *who* clicked approve in a separate column.
+      // For now, only updating status and time.
+    };
+
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .update(updates)
+      .eq("id_requerimiento", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async revertRequirement(id) {
+    const { error } = await supabase
+      .from("requerimiento")
+      .update({
+        estado: 'P',
+        fechahora_aprobacion: null
+      })
+      .eq("id_requerimiento", id);
+
+    if (error) throw error;
+    return true;
+  }
 };
