@@ -5,10 +5,10 @@ import { ToastProvider } from './ui/Toast';
 
 export function Providers({ children }) {
     return (
-        <ModalProvider>
-            <ToastProvider>
+        <ToastProvider>
+            <ModalProvider>
                 {children}
-            </ToastProvider>
-        </ModalProvider>
+            </ModalProvider>
+        </ToastProvider>
     );
 }
