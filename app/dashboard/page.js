@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Card,
   CardHeader,
@@ -10,12 +10,13 @@ import {
   Icons,
 } from "../components/ui";
 import { MainLayout } from "../components/layout";
-import { DB } from "../lib/database"; // Changed from ../lib/db to use proper adapter
+import { DB } from "../lib/database";
 import { Helpers } from "../lib/utils/helpers";
 import { getAccessDeniedMessage } from "../lib/permissions";
 import Link from "next/link";
 
 function DashboardContent() {
+  const router = useRouter(); // Added for click navigation
   const searchParams = useSearchParams();
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -25,7 +26,7 @@ function DashboardContent() {
   const [stats, setStats] = useState({
     lowStockItems: [],
     pendingTransfers: [],
-    recentMovements: [],
+    recentActivity: [], // Renamed from recentMovements to include requirements
     principalTotal: 0,
     instrumentacionTotal: 0
   });
@@ -44,55 +45,63 @@ function DashboardContent() {
     // Initial fetch
     loadDashboardData();
 
-    // Optional: Refresh interval (e.g., every 30s)
+    // Optional: Refresh interval
     const interval = setInterval(loadDashboardData, 30000);
     return () => clearInterval(interval);
   }, [searchParams]);
 
   const loadDashboardData = async () => {
     try {
-      // 1. Fetch Movements (Async support)
+      // 1. Fetch Movements & Requirements (Async support)
       const movements = await DB.getAllMovements();
+      const requirements = await DB.getRequirements(); // Fetch requirements
 
-      // 2. Fetch Products & Inventory (for stock calculations)
-      // Note: Helpers usually use MockSync, but for Dashboard we want fresh data.
-      // If DB allows async getters for products/inventory, we should use them.
-      // For now, assuming Helpers might act on cached/sync data which is updated by DB calls.
-      // In a full async refactor, Helpers should also be async or take data as args.
-
-      // Calculate Recent Activity
-      const recent = movements
+      // 2. Combine and Sort for "Recent Activity"
+      // Movements
+      const movActivity = movements
         .filter((m) => m.estado === "C")
-        .sort((a, b) => new Date(b.fechaHoraSolicitud) - new Date(a.fechaHoraSolicitud))
-        .slice(0, 5);
+        .map(m => ({
+          ...m,
+          type: 'movement',
+          dateObj: new Date(m.fechaHoraSolicitud)
+        }));
 
-      // Calculate Pending Transfers
+      // Requirements
+      const reqActivity = requirements
+        .map(r => ({
+          ...r,
+          type: 'requirement',
+          dateObj: new Date(r.fechaHoraRequ) // Use request date
+        }));
+
+      const combinedActivity = [...movActivity, ...reqActivity]
+        .sort((a, b) => b.dateObj - a.dateObj)
+        .slice(0, 7); // Show bit more context
+
+      // 3. Pending Transfers
       const pending = movements.filter(m => m.tipo === 'TRF' && m.estado === 'P');
 
-      // Calculate Low Stock
-      // We need to ensure DB.getAllProducts and DB.getTotalStock return fresh data
-      // For Supabase, we might need direct calls if Helpers are purely static
+      // 4. Low Stock (Using stock_total for consistency with SupabaseDB/Notifs)
       const products = await DB.getAllProducts();
       const inventory = await DB.getAllInventory();
-      const settings = DB.getSettings(); // This might be sync (localStorage)
+      const settings = DB.getSettings();
 
-      // Calculate Low Stock manually with fresh data
       const lowStock = products.filter(p => {
-        const prodInv = inventory.filter(i => i.codigo_producto == p.id || i.codigo_producto == p.codigo_producto);
-        const totalStock = prodInv.reduce((sum, item) => sum + item.stock, 0);
         const factor = (settings.stockThreshold || 100) / 100;
-        return totalStock <= (p.stock_minimo * factor);
+        // Use stock_total now available in hydrated product (from both MockDB and Supabase)
+        // Fallback to calculation if undefined (safety)
+        const currentStock = p.stock_total !== undefined ? p.stock_total : Helpers.getTotalStock(p.id);
+        return currentStock <= (p.stock_minimo * factor);
       }).map(p => {
-        const prodInv = inventory.filter(i => i.codigo_producto == p.id || i.codigo_producto == p.codigo_producto);
-        const totalStock = prodInv.reduce((sum, item) => sum + item.stock, 0);
+        const currentStock = p.stock_total !== undefined ? p.stock_total : Helpers.getTotalStock(p.id);
         return {
           product: p,
-          totalStock,
-          deficit: p.stock_minimo - totalStock
+          totalStock: currentStock,
+          deficit: p.stock_minimo - currentStock
         };
       }).sort((a, b) => b.deficit - a.deficit);
 
-      // Calculate Warehouse Totals
+      // 5. Warehouse Totals
       const principalSum = inventory
         .filter(i => i.id_bodega === 1)
         .reduce((sum, i) => sum + i.stock, 0);
@@ -104,7 +113,7 @@ function DashboardContent() {
       setStats({
         lowStockItems: lowStock,
         pendingTransfers: pending,
-        recentMovements: recent,
+        recentActivity: combinedActivity,
         principalTotal: principalSum,
         instrumentacionTotal: instrumSum
       });
@@ -113,6 +122,28 @@ function DashboardContent() {
       console.error("Failed to load dashboard data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLowStockClick = (item) => {
+    // Navigate to inventory filtering by this product
+    // Note: Inventory page might not support filter params yet, but we can send them.
+    // Ideally: router.push(`/inventory?search=${item.product.nombre}`);
+    router.push(`/inventory`);
+  };
+
+  const handleActivityClick = (item) => {
+    if (item.type === 'requirement') {
+      router.push('/requirements'); // Or specific detail page if available
+    } else {
+      // Movement
+      if (item.tipo === 'TRF' || item.tipo === 'TRANSFERENCIA') {
+        router.push('/requests'); // Or History
+      } else if (item.tipo === 'ENT' || item.tipo === 'ENTRADA') {
+        router.push('/history'); // Or Entries
+      } else {
+        router.push('/history'); // Or Exits
+      }
     }
   };
 
@@ -191,18 +222,14 @@ function DashboardContent() {
               </div>
             ) : (
               stats.lowStockItems.map((item) => {
-                // Determine breakdown per warehouse (Optional optimization: calculate in map above)
-                // For now, re-fetching from DB is async, so we assume 'item.product' has info or we re-calc locally using the fetched 'inventory' from stats??
-                // Simpler: recalculate locally to avoid N+1 async calls
-                // But we don't have full inventory in state 'stats'.
-                // Let's rely on Helpers.getInventory which MIGHT work if MockDB is updated, but for Supabase it won't.
-                // Better approach: We calculated totals in 'lowStock' state mapping.
-
-                // Let's modify the map above to include principal/instrum breakdown
-                // Re-implementing display logic based on available item data
-
                 return (
-                  <div key={item.product.id || item.product.codigo_producto} className="stock-alert-item">
+                  <div
+                    key={item.product.id || item.product.codigo_producto}
+                    className="stock-alert-item"
+                    onClick={() => handleLowStockClick(item)}
+                    style={{ cursor: 'pointer' }}
+                    title="Ir al inventario"
+                  >
                     <div className="stock-alert-info">
                       <span
                         className={`stock-alert-indicator ${item.totalStock === 0 ? "critical" : "warning"}`}
@@ -220,8 +247,6 @@ function DashboardContent() {
                             color: "var(--text-secondary)",
                           }}
                         >
-                          {/* Note: Breaking down exact warehouse stock here is tricky without passing full inventory. 
-                               For now showing Total vs Min is the most critical. */}
                           <div>
                             Minimo Requerido: <strong>{item.product.stock_minimo}</strong>
                           </div>
@@ -258,38 +283,62 @@ function DashboardContent() {
           <div className="activity-list">
             {loading ? (
               <div style={{ padding: '20px', textAlign: 'center' }}>Cargando actividad...</div>
-            ) : stats.recentMovements.length === 0 ? (
+            ) : stats.recentActivity.length === 0 ? (
               <div className="empty-state">
                 <p className="text-muted">No hay actividad reciente</p>
               </div>
             ) : (
-              stats.recentMovements.map((mov) => {
-                // mov.producto might be null if just defined by code, try to find name
-                const prodName = mov.producto?.nombre || mov.producto_nombre || 'Producto';
+              stats.recentActivity.map((item) => {
+                // Handle mixed types (Movement vs Requirement)
+                const isReq = item.type === 'requirement';
 
-                const iconClass =
-                  mov.tipo === "ENT"
-                    ? "entry"
-                    : mov.tipo === "SAL"
-                      ? "exit"
-                      : "transfer";
+                // IDs
+                const key = isReq ? `req-${item.id_requerimiento}` : `mov-${item.id_movimiento}`;
+
+                // Description/Title
+                const prodName = isReq
+                  ? (item.producto_nombre || item.nombre_producto || 'Producto')
+                  : (item.producto?.nombre || item.producto_nombre || 'Producto');
+
+                const title = isReq
+                  ? `Requerimiento #${item.id_requerimiento}`
+                  : `${item.codigo_movimiento}`;
+
+                // Icon & Style
+                let icon = <Icons.Check size={16} />;
+                let iconClass = 'entry'; // default green
+
+                if (isReq) {
+                  icon = <Icons.Requests size={16} />;
+                  iconClass = 'transfer'; // Blue/Purple for requirements
+                } else {
+                  if (item.tipo === 'SAL') { icon = <Icons.Truck size={16} />; iconClass = 'exit'; }
+                  if (item.tipo === 'TRF') { icon = <Icons.Transfers size={16} />; iconClass = 'transfer'; }
+                }
+
+                // Subtitle / Meta
+                const metaText = isReq
+                  ? `Solicitado por ${item.solicitante_nombre || 'Usuario'}`
+                  : `${item.cantidad} · ${Helpers.formatRelativeTime(item.fechaHoraSolicitud)}`;
 
                 return (
-                  <div key={mov.id_movimiento} className="activity-item">
+                  <div
+                    key={key}
+                    className="activity-item"
+                    onClick={() => handleActivityClick(item)}
+                    style={{ cursor: 'pointer' }}
+                    title={isReq ? "Ver Requerimientos" : "Ver Movimiento"}
+                  >
                     <div className={`activity-icon ${iconClass}`}>
-                      {mov.tipo === "ENT" && <Icons.Check size={16} />}
-                      {mov.tipo === "SAL" && <Icons.Truck size={16} />}
-                      {mov.tipo === "TRF" && <Icons.Transfers size={16} />}
+                      {icon}
                     </div>
                     <div className="activity-content">
                       <div className="activity-title">
-                        {mov.codigo_movimiento} -{" "}
-                        {prodName}
+                        {title} - {prodName}
                       </div>
                       <div className="activity-meta">
-                        {mov.cantidad}{" "}
-                        ·{" "}
-                        {Helpers.formatRelativeTime(mov.fechaHoraSolicitud)}
+                        {metaText}
+                        {isReq && <span style={{ marginLeft: '6px', fontSize: '0.9em' }}>· {Helpers.formatRelativeTime(item.fechaHoraRequ)}</span>}
                       </div>
                     </div>
                   </div>

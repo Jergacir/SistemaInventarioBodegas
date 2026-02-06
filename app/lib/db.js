@@ -29,6 +29,12 @@ export const DB = {
       (u) => u.id_ubicacion === product.id_ubicacion_instrum,
     );
 
+    // Calculate stock from INVENTARIO
+    const inventory = MockData.INVENTARIO.filter(i => i.codigo_producto == product.codigo_producto);
+    const stock_principal = inventory.find(i => i.id_bodega === 1)?.stock || 0;
+    const stock_instrumentacion = inventory.find(i => i.id_bodega === 2)?.stock || 0;
+    const stock_total = stock_principal + stock_instrumentacion;
+
     return {
       ...product,
       id: product.codigo_producto, // maintain compatibility with UI
@@ -39,6 +45,11 @@ export const DB = {
       marca: marca ? marca.nombre : "Desconocida", // Alias for UI
       unidad_medida: product.unidad, // Alias for UI
       imagen_url: product.url_imagen, // Alias for UI
+      // Stock properties (Parity with SupabaseDB)
+      stock_total,
+      stock_principal,
+      stock_instrumentacion,
+
       ubicacion_principal: ubicacion_p
         ? `${ubicacion_p.tipo}-${ubicacion_p.numero}-${ubicacion_p.nivel}`
         : "N/A",
