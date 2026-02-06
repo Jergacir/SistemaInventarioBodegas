@@ -346,6 +346,25 @@ export const SupabaseDB = {
   },
 
   // ==================== INVENTARIO ====================
+  // Alias for compatibility with MockDB interface
+  async getAllInventory() {
+    return this.getInventory();
+  },
+
+  async getTotalStock(productId) {
+    const { data, error } = await supabase
+      .from("inventario")
+      .select("stock")
+      .eq("codigo_producto", productId);
+
+    if (error) {
+      console.error("Error getting total stock:", error);
+      return 0;
+    }
+
+    return data.reduce((sum, item) => sum + item.stock, 0);
+  },
+
   async getInventory() {
     const { data, error } = await supabase
       .from("inventario")
