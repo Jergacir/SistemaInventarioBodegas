@@ -146,6 +146,18 @@ export default function RequirementsPage() {
         );
     };
 
+    const openHistoryModal = () => {
+        openModal(
+            'Historial de Requerimientos',
+            <RequirementsHistoryModal
+                requirements={requirements}
+                users={users}
+                closeModal={closeModal}
+            />,
+            'large' // Use a larger modal for the table
+        );
+    };
+
     const isAdmin = currentUser?.rol === 'ADMIN';
 
     const filteredReqs = useMemo(() => {
@@ -160,7 +172,11 @@ export default function RequirementsPage() {
                     <h1 className="page-title">Requerimientos</h1>
                     <p className="page-subtitle">Solicitud de productos nuevos o stock</p>
                 </div>
-                <div className="page-actions">
+                <div className="page-actions" style={{ gap: '10px', display: 'flex' }}>
+                    <Button variant="secondary" onClick={openHistoryModal}>
+                        <Icons.History size={18} />
+                        Ver Historial
+                    </Button>
                     <Button variant="primary" onClick={openCreateModal}>
                         <Icons.Plus size={18} />
                         Nuevo Requerimiento
@@ -259,6 +275,137 @@ export default function RequirementsPage() {
         </MainLayout>
     );
 }
+
+// Sub-component for History Modal
+const RequirementsHistoryModal = ({ requirements, users, closeModal }) => {
+    const [filterStart, setFilterStart] = useState('');
+    const [filterEnd, setFilterEnd] = useState('');
+    const [filterStatus, setFilterStatus] = useState('ALL');
+
+    // Filter Logic
+    const filteredHistory = useMemo(() => {
+        return requirements.filter(req => {
+            // Status Filter
+            if (filterStatus !== 'ALL' && req.estado !== filterStatus) return false;
+
+            // Date Filter
+            const reqDate = new Date(req.fechaHoraRequ);
+            if (filterStart) {
+                const startDate = new Date(filterStart);
+                startDate.setHours(0, 0, 0, 0); // Start of day
+                if (reqDate < startDate) return false;
+            }
+            if (filterEnd) {
+                const endDate = new Date(filterEnd);
+                endDate.setHours(23, 59, 59, 999); // End of day
+                if (reqDate > endDate) return false;
+            }
+
+            return true;
+        }).sort((a, b) => new Date(b.fechaHoraRequ) - new Date(a.fechaHoraRequ));
+    }, [requirements, filterStart, filterEnd, filterStatus]);
+
+    const handleExport = async () => {
+        try {
+            const XLSX = (await import('xlsx'));
+
+            const data = filteredHistory.map(req => ({
+                ID: req.id_requerimiento,
+                Producto: req.producto_nombre,
+                Codigo: req.codigo_producto || 'N/A',
+                Marca: req.marca_nombre,
+                Estado: req.estado === 'A' ? 'APROBADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE',
+                Solicitante: req.solicitante_nombre,
+                Responsable: req.responsable_nombre || 'N/A',
+                Fecha: new Date(req.fechaHoraRequ).toLocaleString(),
+                Detalles: req.descripcion
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Historial Requerimientos");
+            XLSX.writeFile(wb, `Historial_Requerimientos_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } catch (error) {
+            console.error("Export failed:", error);
+            alert("Error al exportar a Excel");
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
+            {/* Filters */}
+            <div style={{
+                display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'end',
+                padding: '16px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)'
+            }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Desde</label>
+                    <input
+                        type="date"
+                        value={filterStart}
+                        onChange={e => setFilterStart(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                    />
+                </div>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Hasta</label>
+                    <input
+                        type="date"
+                        value={filterEnd}
+                        onChange={e => setFilterEnd(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                    />
+                </div>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Estado</label>
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                    >
+                        <option value="ALL">Todos</option>
+                        <option value="P">Pendientes</option>
+                        <option value="A">Aprobados</option>
+                        <option value="R">Rechazados</option>
+                    </select>
+                </div>
+                <Button variant="outline" onClick={handleExport} style={{ height: '38px' }}>
+                    <Icons.Export size={16} /> Exportar
+                </Button>
+            </div>
+
+            {/* List */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {filteredHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                        No se encontraron registros.
+                    </div>
+                ) : (
+                    filteredHistory.map(req => (
+                        <div key={req.id_requerimiento} style={{
+                            padding: '12px', border: '1px solid var(--border-light)', borderRadius: '6px',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)'
+                        }}>
+                            <div>
+                                <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>
+                                    {req.producto_nombre} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({req.marca_nombre})</span>
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                    {Helpers.formatDateTime(req.fechaHoraRequ)} · Por <strong>{req.solicitante_nombre}</strong>
+                                </div>
+                            </div>
+                            <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '15px', display: 'flex', justifyContent: 'flex-end' }}>
+                <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
+            </div>
+        </div>
+    );
+};
 
 // Sub-component that manages its own state to avoid Modal stale closure issues
 const RequirementForm = ({ products, brands, users, currentUser, onSubmit, closeModal }) => {
