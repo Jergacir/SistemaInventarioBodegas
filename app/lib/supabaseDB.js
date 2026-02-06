@@ -292,64 +292,65 @@ export const SupabaseDB = {
     const idPrincip = await resolveLocationId(productData.ubicacion_principal);
     const idInstrum = await resolveLocationId(productData.ubicacion_instrumentacion);
 
-    codigo_producto: productData.codigo_visible || productData.id,
+    const payload = {
+      codigo_producto: productData.codigo_visible || productData.id,
       nombre: productData.nombre,
-        unidad: productData.unidad_medida || productData.unidad,
-          descripcion: productData.descripcion, // Added description
-            url_imagen: null, // Removed image, sending null
-              stock_minimo: productData.stock_minimo,
-                id_marca: brandId,
-                  id_categoria: categoryId,
-                    id_ubicacion_princip: idPrincip,
-                      id_ubicacion_instrum: idInstrum,
+      unidad: productData.unidad_medida || productData.unidad,
+      descripcion: productData.descripcion, // Added description
+      url_imagen: null, // Removed image, sending null
+      stock_minimo: productData.stock_minimo,
+      id_marca: brandId,
+      id_categoria: categoryId,
+      id_ubicacion_princip: idPrincip,
+      id_ubicacion_instrum: idInstrum,
     };
 
-  let result;
-  if(productData.id && !productData.isNew) { // isNew flag might be passed by UI if it's a new entry despite having an ID (unlikely but safe)
-    const { data, error } = await supabase
-      .from("producto")
-      .update(payload)
-      .eq("codigo_producto", productData.id)
-      .select()
-      .single();
-if (error) throw error;
-result = data;
+    let result;
+    if (productData.id && !productData.isNew) { // isNew flag might be passed by UI if it's a new entry despite having an ID (unlikely but safe)
+      const { data, error } = await supabase
+        .from("producto")
+        .update(payload)
+        .eq("codigo_producto", productData.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
     } else {
-  const { data, error } = await supabase
-    .from("producto")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) throw error;
+      const { data, error } = await supabase
+        .from("producto")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
 
-  // Init inventory
-  await supabase.from("inventario").insert([
-    { codigo_producto: data.codigo_producto, id_bodega: 1, stock: 0, estado: 'S' },
-    { codigo_producto: data.codigo_producto, id_bodega: 2, stock: 0, estado: 'S' }
-  ]);
-  result = data;
-}
-return this.hydrateProduct(await this.getProductById(result.codigo_producto));
+      // Init inventory
+      await supabase.from("inventario").insert([
+        { codigo_producto: data.codigo_producto, id_bodega: 1, stock: 0, estado: 'S' },
+        { codigo_producto: data.codigo_producto, id_bodega: 2, stock: 0, estado: 'S' }
+      ]);
+      result = data;
+    }
+    return this.hydrateProduct(await this.getProductById(result.codigo_producto));
   },
 
   async deleteProduct(id) {
-  // Delete dependencies first
-  await supabase.from("inventario").delete().eq("codigo_producto", id);
-  // Note: MOVIMIENTO also references PRODUCTO. If strict FK, this fails. 
-  // Ideally we checked for movements before deleting.
-  const { error } = await supabase
-    .from("producto")
-    .delete()
-    .eq("codigo_producto", id);
-  if (error) throw error;
-},
+    // Delete dependencies first
+    await supabase.from("inventario").delete().eq("codigo_producto", id);
+    // Note: MOVIMIENTO also references PRODUCTO. If strict FK, this fails. 
+    // Ideally we checked for movements before deleting.
+    const { error } = await supabase
+      .from("producto")
+      .delete()
+      .eq("codigo_producto", id);
+    if (error) throw error;
+  },
 
   // ==================== INVENTARIO ====================
   async getInventory() {
-  const { data, error } = await supabase
-    .from("inventario")
-    .select(
-      `
+    const { data, error } = await supabase
+      .from("inventario")
+      .select(
+        `
               *,
               producto (
                 *,
@@ -360,60 +361,60 @@ return this.hydrateProduct(await this.getProductById(result.codigo_producto));
               ),
               bodega(*)
         `,
-    )
-    .order("codigo_producto");
+      )
+      .order("codigo_producto");
 
-  if (error) throw error;
+    if (error) throw error;
 
-  // Flatten logic for easier consumption in frontend
-  return data.map(item => ({
-    ...item,
-    producto: this.hydrateProduct(item.producto)
-  }));
-},
+    // Flatten logic for easier consumption in frontend
+    return data.map(item => ({
+      ...item,
+      producto: this.hydrateProduct(item.producto)
+    }));
+  },
 
   async getInventoryByProduct(codigo_producto) {
-  const { data, error } = await supabase
-    .from("inventario")
-    .select(
-      `
+    const { data, error } = await supabase
+      .from("inventario")
+      .select(
+        `
               *,
               bodega(*)
                 `,
-    )
-    .eq("codigo_producto", codigo_producto);
+      )
+      .eq("codigo_producto", codigo_producto);
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   async updateInventoryStock(
-  codigo_producto,
-  id_bodega,
-  newStock,
-  estado = "N",
-) {
-  const { data, error } = await supabase
-    .from("inventario")
-    .upsert({
-      codigo_producto,
-      id_bodega,
-      stock: newStock,
-      estado,
-    })
-    .select()
-    .single();
+    codigo_producto,
+    id_bodega,
+    newStock,
+    estado = "N",
+  ) {
+    const { data, error } = await supabase
+      .from("inventario")
+      .upsert({
+        codigo_producto,
+        id_bodega,
+        stock: newStock,
+        estado,
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   // ==================== MOVIMIENTOS ====================
   async getAllMovements() {
-  const { data, error } = await supabase
-    .from("movimiento")
-    .select(
-      `
+    const { data, error } = await supabase
+      .from("movimiento")
+      .select(
+        `
               *,
               producto(nombre),
               responsable: usuario!id_responsable(nombre_completo),
@@ -421,24 +422,24 @@ return this.hydrateProduct(await this.getProductById(result.codigo_producto));
               bodega_origen: bodega!id_bodega_origen(nombre),
               bodega_destino: bodega!id_bodega_destino(nombre)
         `,
-    )
-    .order("fechahorasolicitud", { ascending: false });
+      )
+      .order("fechahorasolicitud", { ascending: false });
 
-  if (error) throw error;
+    if (error) throw error;
 
-  // Map snake_case DB columns to camelCase for UI compatibility
-  return data.map(m => ({
-    ...m,
-    fechaHoraSolicitud: m.fechahorasolicitud,
-    fechaHoraAprobacion: m.fechahoraaprobacion
-  }));
-},
+    // Map snake_case DB columns to camelCase for UI compatibility
+    return data.map(m => ({
+      ...m,
+      fechaHoraSolicitud: m.fechahorasolicitud,
+      fechaHoraAprobacion: m.fechahoraaprobacion
+    }));
+  },
 
   async getMovementById(id) {
-  const { data, error } = await supabase
-    .from("movimiento")
-    .select(
-      `
+    const { data, error } = await supabase
+      .from("movimiento")
+      .select(
+        `
                       *,
                       producto(*),
                       responsable: usuario!id_responsable(*),
@@ -446,615 +447,615 @@ return this.hydrateProduct(await this.getProductById(result.codigo_producto));
                           bodega_origen: bodega!id_bodega_origen(*),
                             bodega_destino: bodega!id_bodega_destino(*)
                               `,
-    )
-    .eq("id_movimiento", id)
-    .single();
+      )
+      .eq("id_movimiento", id)
+      .single();
 
-  if (error) throw error;
-  if (data) {
-    data.fechaHoraSolicitud = data.fechahorasolicitud;
-    data.fechaHoraAprobacion = data.fechahoraaprobacion;
-  }
-  return data;
-},
+    if (error) throw error;
+    if (data) {
+      data.fechaHoraSolicitud = data.fechahorasolicitud;
+      data.fechaHoraAprobacion = data.fechahoraaprobacion;
+    }
+    return data;
+  },
 
   async createMovement(movementData) {
-  const { data, error } = await supabase
-    .from("movimiento")
-    .insert({
-      codigo_movimiento: movementData.codigo_movimiento,
-      tipo: movementData.tipo,
-      cantidad: movementData.cantidad,
-      estado: movementData.estado || "P",
-      notas: movementData.notas,
-      id_responsable: movementData.id_responsable,
-      id_solicitante: movementData.id_solicitante,
-      codigo_producto: movementData.codigo_producto,
-      id_bodega_origen: movementData.id_bodega_origen,
-      id_bodega_destino: movementData.id_bodega_destino,
-      fechahorasolicitud: new Date().toISOString()
-    })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("movimiento")
+      .insert({
+        codigo_movimiento: movementData.codigo_movimiento,
+        tipo: movementData.tipo,
+        cantidad: movementData.cantidad,
+        estado: movementData.estado || "P",
+        notas: movementData.notas,
+        id_responsable: movementData.id_responsable,
+        id_solicitante: movementData.id_solicitante,
+        codigo_producto: movementData.codigo_producto,
+        id_bodega_origen: movementData.id_bodega_origen,
+        id_bodega_destino: movementData.id_bodega_destino,
+        fechahorasolicitud: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return { ...data, fechaHoraSolicitud: data.fechahorasolicitud };
-},
+    if (error) throw error;
+    return { ...data, fechaHoraSolicitud: data.fechahorasolicitud };
+  },
 
   async updateMovement(id, movementData) {
-  const updates = { ...movementData };
+    const updates = { ...movementData };
 
-  if (movementData.estado === "C") {
-    updates.fechahoraaprobacion = new Date().toISOString();
-    delete updates.fechaHoraAprobacion; // Remove camelCase if present
-  }
-
-  const { data, error } = await supabase
-    .from("movimiento")
-    .update(updates)
-    .eq("id_movimiento", id)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // If approving a movement, we should also update stock if it's an entry or exit
-  if (updates.estado === 'C' && data.estado === 'C') {
-    // Logic for Entry (ENT)
-    if (data.tipo === 'ENT') {
-      const { data: currentInv } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', data.codigo_producto)
-        .eq('id_bodega', data.id_bodega_destino)
-        .single();
-
-      const newStock = (currentInv?.stock || 0) + data.cantidad;
-      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_destino);
+    if (movementData.estado === "C") {
+      updates.fechahoraaprobacion = new Date().toISOString();
+      delete updates.fechaHoraAprobacion; // Remove camelCase if present
     }
 
-    // Logic for Exit (SAL)
-    if (data.tipo === 'SAL') {
-      const { data: currentInv } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', data.codigo_producto)
-        .eq('id_bodega', data.id_bodega_origen)
-        .single();
+    const { data, error } = await supabase
+      .from("movimiento")
+      .update(updates)
+      .eq("id_movimiento", id)
+      .select()
+      .single();
 
-      // Check negative stock? Allow it for now or check? Ideally check first but update is already done.
-      // Rely on frontend validation for now.
-      const newStock = (currentInv?.stock || 0) - data.cantidad;
-      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_origen);
+    if (error) throw error;
+
+    // If approving a movement, we should also update stock if it's an entry or exit
+    if (updates.estado === 'C' && data.estado === 'C') {
+      // Logic for Entry (ENT)
+      if (data.tipo === 'ENT') {
+        const { data: currentInv } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', data.codigo_producto)
+          .eq('id_bodega', data.id_bodega_destino)
+          .single();
+
+        const newStock = (currentInv?.stock || 0) + data.cantidad;
+        await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_destino);
+      }
+
+      // Logic for Exit (SAL)
+      if (data.tipo === 'SAL') {
+        const { data: currentInv } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', data.codigo_producto)
+          .eq('id_bodega', data.id_bodega_origen)
+          .single();
+
+        // Check negative stock? Allow it for now or check? Ideally check first but update is already done.
+        // Rely on frontend validation for now.
+        const newStock = (currentInv?.stock || 0) - data.cantidad;
+        await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', data.codigo_producto).eq('id_bodega', data.id_bodega_origen);
+      }
     }
-  }
 
-  return { ...data, fechaHoraSolicitud: data.fechahorasolicitud, fechaHoraAprobacion: data.fechahoraaprobacion };
-},
+    return { ...data, fechaHoraSolicitud: data.fechahorasolicitud, fechaHoraAprobacion: data.fechahoraaprobacion };
+  },
 
 
 
 
   async revertMovementToPending(id) {
-  const { data: movement, error } = await supabase
-    .from("movimiento")
-    .select("*")
-    .eq("id_movimiento", id)
-    .single();
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .select("*")
+      .eq("id_movimiento", id)
+      .single();
 
-  if (error) throw error;
-  if (!movement) throw new Error("Movimiento no encontrado");
+    if (error) throw error;
+    if (!movement) throw new Error("Movimiento no encontrado");
 
-  // Logic for Completed movements: Revert stock
-  if (movement.estado === 'C') {
+    // Logic for Completed movements: Revert stock
+    if (movement.estado === 'C') {
 
 
-    if (movement.tipo === 'ENT') {
-      // Entry added stock, so we subtract it
-      const { data: invDest } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_destino)
-        .single();
+      if (movement.tipo === 'ENT') {
+        // Entry added stock, so we subtract it
+        const { data: invDest } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_destino)
+          .single();
 
-      const newStock = (invDest?.stock || 0) - movement.cantidad;
-      await supabase.from('inventario').update({ stock: newStock })
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_destino);
-    } else if (movement.tipo === 'SAL') {
-      // Exit removed stock, so we add it back
-      const { data: invOrig } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_origen)
-        .single();
-
-      const newStock = (invOrig?.stock || 0) + movement.cantidad;
-      await supabase.from('inventario').update({ stock: newStock })
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_origen);
-    }
-  }
-
-  const { error: updateError } = await supabase
-    .from("movimiento")
-    .update({
-      estado: 'P',
-      fechahoraaprobacion: null,
-      id_responsable: null
-    })
-    .eq("id_movimiento", id);
-
-  if (updateError) throw updateError;
-  return true;
-},
-
-  async deleteMovement(id) {
-  // 1. Get movement details to check status and stock impact
-  const { data: movement, error } = await supabase
-    .from("movimiento")
-    .select("*")
-    .eq("id_movimiento", id)
-    .single();
-
-  if (error) throw error;
-  if (!movement) throw new Error("Movimiento no encontrado");
-
-  // 2. Undo Stock IF Completed
-  if (movement.estado === 'C') {
-    if (movement.tipo === 'ENT') {
-      // Entry added stock -> Subtract it back
-      const { data: invDest } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_destino)
-        .single();
-
-      if (invDest) {
-        const newStock = Math.max(0, invDest.stock - movement.cantidad);
-        await supabase.from('inventario')
-          .update({ stock: newStock })
+        const newStock = (invDest?.stock || 0) - movement.cantidad;
+        await supabase.from('inventario').update({ stock: newStock })
           .eq('codigo_producto', movement.codigo_producto)
           .eq('id_bodega', movement.id_bodega_destino);
-      }
-    } else if (movement.tipo === 'SAL') {
-      // Exit removed stock -> Add it back
-      const { data: invOrig } = await supabase
-        .from('inventario')
-        .select('stock')
-        .eq('codigo_producto', movement.codigo_producto)
-        .eq('id_bodega', movement.id_bodega_origen)
-        .single();
+      } else if (movement.tipo === 'SAL') {
+        // Exit removed stock, so we add it back
+        const { data: invOrig } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_origen)
+          .single();
 
-      if (invOrig) {
-        const newStock = invOrig.stock + movement.cantidad;
-        await supabase.from('inventario')
-          .update({ stock: newStock })
+        const newStock = (invOrig?.stock || 0) + movement.cantidad;
+        await supabase.from('inventario').update({ stock: newStock })
           .eq('codigo_producto', movement.codigo_producto)
           .eq('id_bodega', movement.id_bodega_origen);
       }
     }
-    // Transfers would need handling if we had them as single records, but now they are split into Exit+Entry,
-    // so deleting one half (the Exit) adds back to Origin. The Entry half is separate.
-    // User might need to delete BOTH to fully revert a transfer, but that's expected behavior for split records.
-  }
 
-  // 3. Delete record
-  const { error: deleteError } = await supabase
-    .from('movimiento')
-    .delete()
-    .eq('id_movimiento', id);
+    const { error: updateError } = await supabase
+      .from("movimiento")
+      .update({
+        estado: 'P',
+        fechahoraaprobacion: null,
+        id_responsable: null
+      })
+      .eq("id_movimiento", id);
 
-  if (deleteError) throw deleteError;
-  return true;
-},
+    if (updateError) throw updateError;
+    return true;
+  },
+
+  async deleteMovement(id) {
+    // 1. Get movement details to check status and stock impact
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .select("*")
+      .eq("id_movimiento", id)
+      .single();
+
+    if (error) throw error;
+    if (!movement) throw new Error("Movimiento no encontrado");
+
+    // 2. Undo Stock IF Completed
+    if (movement.estado === 'C') {
+      if (movement.tipo === 'ENT') {
+        // Entry added stock -> Subtract it back
+        const { data: invDest } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_destino)
+          .single();
+
+        if (invDest) {
+          const newStock = Math.max(0, invDest.stock - movement.cantidad);
+          await supabase.from('inventario')
+            .update({ stock: newStock })
+            .eq('codigo_producto', movement.codigo_producto)
+            .eq('id_bodega', movement.id_bodega_destino);
+        }
+      } else if (movement.tipo === 'SAL') {
+        // Exit removed stock -> Add it back
+        const { data: invOrig } = await supabase
+          .from('inventario')
+          .select('stock')
+          .eq('codigo_producto', movement.codigo_producto)
+          .eq('id_bodega', movement.id_bodega_origen)
+          .single();
+
+        if (invOrig) {
+          const newStock = invOrig.stock + movement.cantidad;
+          await supabase.from('inventario')
+            .update({ stock: newStock })
+            .eq('codigo_producto', movement.codigo_producto)
+            .eq('id_bodega', movement.id_bodega_origen);
+        }
+      }
+      // Transfers would need handling if we had them as single records, but now they are split into Exit+Entry,
+      // so deleting one half (the Exit) adds back to Origin. The Entry half is separate.
+      // User might need to delete BOTH to fully revert a transfer, but that's expected behavior for split records.
+    }
+
+    // 3. Delete record
+    const { error: deleteError } = await supabase
+      .from('movimiento')
+      .delete()
+      .eq('id_movimiento', id);
+
+    if (deleteError) throw deleteError;
+    return true;
+  },
 
   async createEntry(entryData) {
-  // Generate sequential ID
-  // 1. Get last entry
-  const { data: lastMovements } = await supabase
-    .from("movimiento")
-    .select("codigo_movimiento")
-    .eq("tipo", "ENT")
-    .order("id_movimiento", { ascending: false })
-    .limit(1);
+    // Generate sequential ID
+    // 1. Get last entry
+    const { data: lastMovements } = await supabase
+      .from("movimiento")
+      .select("codigo_movimiento")
+      .eq("tipo", "ENT")
+      .order("id_movimiento", { ascending: false })
+      .limit(1);
 
-  let nextSequence = 1;
-  if (lastMovements && lastMovements.length > 0) {
-    const lastCode = lastMovements[0].codigo_movimiento;
-    const parts = lastCode.split('-');
-    if (parts.length === 2 && !isNaN(parts[1])) {
-      nextSequence = parseInt(parts[1]) + 1;
+    let nextSequence = 1;
+    if (lastMovements && lastMovements.length > 0) {
+      const lastCode = lastMovements[0].codigo_movimiento;
+      const parts = lastCode.split('-');
+      if (parts.length === 2 && !isNaN(parts[1])) {
+        nextSequence = parseInt(parts[1]) + 1;
+      }
     }
-  }
 
-  const newCode = `ENT-${String(nextSequence).padStart(5, '0')}`;
+    const newCode = `ENT-${String(nextSequence).padStart(5, '0')}`;
 
-  // 2. Create the movement
-  const { data: movement, error } = await supabase
-    .from("movimiento")
-    .insert({
-      codigo_movimiento: newCode,
-      tipo: 'ENT',
-      cantidad: entryData.cantidad,
-      estado: entryData.estado || 'P',
-      notas: entryData.notas,
-      id_responsable: entryData.id_responsable, // Created by
-      id_solicitante: entryData.id_solicitante, // Requested by
-      codigo_producto: entryData.codigo_producto,
-      id_bodega_origen: null, // Entries strictly have no origin internal warehouse
-      id_bodega_destino: entryData.id_bodega_destino,
-      fechahorasolicitud: new Date().toISOString()
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // 2. If status is Completed ('C'), update stock immediately
-  if (movement.estado === 'C') {
-    const { data: currentInv } = await supabase
-      .from('inventario')
-      .select('stock')
-      .eq('codigo_producto', entryData.codigo_producto)
-      .eq('id_bodega', entryData.id_bodega_destino)
+    // 2. Create the movement
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .insert({
+        codigo_movimiento: newCode,
+        tipo: 'ENT',
+        cantidad: entryData.cantidad,
+        estado: entryData.estado || 'P',
+        notas: entryData.notas,
+        id_responsable: entryData.id_responsable, // Created by
+        id_solicitante: entryData.id_solicitante, // Requested by
+        codigo_producto: entryData.codigo_producto,
+        id_bodega_origen: null, // Entries strictly have no origin internal warehouse
+        id_bodega_destino: entryData.id_bodega_destino,
+        fechahorasolicitud: new Date().toISOString()
+      })
+      .select()
       .single();
 
-    const newStock = (currentInv?.stock || 0) + parseFloat(movement.cantidad);
+    if (error) throw error;
 
-    await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', entryData.codigo_producto).eq('id_bodega', entryData.id_bodega_destino);
-  }
+    // 2. If status is Completed ('C'), update stock immediately
+    if (movement.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', entryData.codigo_producto)
+        .eq('id_bodega', entryData.id_bodega_destino)
+        .single();
 
-  return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
-},
+      const newStock = (currentInv?.stock || 0) + parseFloat(movement.cantidad);
+
+      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', entryData.codigo_producto).eq('id_bodega', entryData.id_bodega_destino);
+    }
+
+    return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
+  },
 
   async createExit(exitData) {
-  // 1. Validation (Optional but good): Check stock before creating if auto-approving
-  if (exitData.estado === 'C') {
-    const { data: currentInv } = await supabase
-      .from('inventario')
-      .select('stock')
-      .eq('codigo_producto', exitData.codigo_producto)
-      .eq('id_bodega', exitData.id_bodega_origen)
-      .single();
+    // 1. Validation (Optional but good): Check stock before creating if auto-approving
+    if (exitData.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', exitData.codigo_producto)
+        .eq('id_bodega', exitData.id_bodega_origen)
+        .single();
 
-    if (!currentInv || currentInv.stock < exitData.cantidad) {
-      throw new Error(`Stock insuficiente. Disponible: ${currentInv?.stock || 0}`);
+      if (!currentInv || currentInv.stock < exitData.cantidad) {
+        throw new Error(`Stock insuficiente. Disponible: ${currentInv?.stock || 0}`);
+      }
     }
-  }
 
-  // Generate sequential ID
-  const { data: lastMovements } = await supabase
-    .from("movimiento")
-    .select("codigo_movimiento")
-    .eq("tipo", "SAL")
-    .order("id_movimiento", { ascending: false })
-    .limit(1);
+    // Generate sequential ID
+    const { data: lastMovements } = await supabase
+      .from("movimiento")
+      .select("codigo_movimiento")
+      .eq("tipo", "SAL")
+      .order("id_movimiento", { ascending: false })
+      .limit(1);
 
-  let nextSequence = 1;
-  if (lastMovements && lastMovements.length > 0) {
-    const lastCode = lastMovements[0].codigo_movimiento;
-    const parts = lastCode.split('-');
-    if (parts.length === 2 && !isNaN(parts[1])) {
-      nextSequence = parseInt(parts[1]) + 1;
+    let nextSequence = 1;
+    if (lastMovements && lastMovements.length > 0) {
+      const lastCode = lastMovements[0].codigo_movimiento;
+      const parts = lastCode.split('-');
+      if (parts.length === 2 && !isNaN(parts[1])) {
+        nextSequence = parseInt(parts[1]) + 1;
+      }
     }
-  }
 
-  const newCode = `SAL-${String(nextSequence).padStart(5, '0')}`;
+    const newCode = `SAL-${String(nextSequence).padStart(5, '0')}`;
 
-  // 2. Create Movement
-  const { data: movement, error } = await supabase
-    .from("movimiento")
-    .insert({
-      codigo_movimiento: newCode,
-      tipo: 'SAL',
-      cantidad: exitData.cantidad,
-      estado: exitData.estado || 'P',
-      notas: exitData.notas || '',
-      id_responsable: exitData.id_responsable,
-      id_solicitante: exitData.id_solicitante, // Can be null if external
-      codigo_producto: exitData.codigo_producto,
-      id_bodega_origen: exitData.id_bodega_origen,
-      id_bodega_destino: null, // Exits strictly have no destination internal warehouse
-      fechahorasolicitud: new Date().toISOString()
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // 3. Update Stock if Completed
-  if (movement.estado === 'C') {
-    const { data: currentInv } = await supabase
-      .from('inventario')
-      .select('stock')
-      .eq('codigo_producto', exitData.codigo_producto)
-      .eq('id_bodega', exitData.id_bodega_origen)
-      .single();
-
-    const newStock = (currentInv?.stock || 0) - parseFloat(movement.cantidad);
-
-    await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', exitData.codigo_producto).eq('id_bodega', exitData.id_bodega_origen);
-  }
-
-  // 4. Handle Transfer (Traspaso) Logic
-  if (exitData.isTransfer && parseInt(exitData.id_bodega_origen) === 1) {
-    // Automatically create Entry to Instrumentation (ID 2)
-    // Only if it was from Principal (ID 1) as requested
-    try {
-      await this.createEntry({
+    // 2. Create Movement
+    const { data: movement, error } = await supabase
+      .from("movimiento")
+      .insert({
+        codigo_movimiento: newCode,
+        tipo: 'SAL',
         cantidad: exitData.cantidad,
-        codigo_producto: exitData.codigo_producto,
-        id_bodega_destino: 2, // Bodega Instrumentación
-        estado: exitData.estado, // Same status (likely 'C')
-        notas: `Traspaso automático desde Salida ${newCode}. ${exitData.notas || ''}`.trim(),
+        estado: exitData.estado || 'P',
+        notas: exitData.notas || '',
         id_responsable: exitData.id_responsable,
-        id_solicitante: exitData.id_solicitante
-      });
-      console.log("Auto-transfer entry created successfully");
-    } catch (transferError) {
-      console.error("Error creating auto-transfer entry:", transferError);
-      // Non-blocking error? Or should we revert? 
-      // For now, log it. User requested functionality, but fallback safety is good.
-    }
-  }
+        id_solicitante: exitData.id_solicitante, // Can be null if external
+        codigo_producto: exitData.codigo_producto,
+        id_bodega_origen: exitData.id_bodega_origen,
+        id_bodega_destino: null, // Exits strictly have no destination internal warehouse
+        fechahorasolicitud: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-  return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
-},
+    if (error) throw error;
+
+    // 3. Update Stock if Completed
+    if (movement.estado === 'C') {
+      const { data: currentInv } = await supabase
+        .from('inventario')
+        .select('stock')
+        .eq('codigo_producto', exitData.codigo_producto)
+        .eq('id_bodega', exitData.id_bodega_origen)
+        .single();
+
+      const newStock = (currentInv?.stock || 0) - parseFloat(movement.cantidad);
+
+      await supabase.from('inventario').update({ stock: newStock }).eq('codigo_producto', exitData.codigo_producto).eq('id_bodega', exitData.id_bodega_origen);
+    }
+
+    // 4. Handle Transfer (Traspaso) Logic
+    if (exitData.isTransfer && parseInt(exitData.id_bodega_origen) === 1) {
+      // Automatically create Entry to Instrumentation (ID 2)
+      // Only if it was from Principal (ID 1) as requested
+      try {
+        await this.createEntry({
+          cantidad: exitData.cantidad,
+          codigo_producto: exitData.codigo_producto,
+          id_bodega_destino: 2, // Bodega Instrumentación
+          estado: exitData.estado, // Same status (likely 'C')
+          notas: `Traspaso automático desde Salida ${newCode}. ${exitData.notas || ''}`.trim(),
+          id_responsable: exitData.id_responsable,
+          id_solicitante: exitData.id_solicitante
+        });
+        console.log("Auto-transfer entry created successfully");
+      } catch (transferError) {
+        console.error("Error creating auto-transfer entry:", transferError);
+        // Non-blocking error? Or should we revert? 
+        // For now, log it. User requested functionality, but fallback safety is good.
+      }
+    }
+
+    return { ...movement, fechaHoraSolicitud: movement.fechahorasolicitud };
+  },
 
   // ==================== CATEGORÍAS ====================
   async getAllCategories() {
-  const { data, error } = await supabase
-    .from("categoria")
-    .select("nombre_categoria")
-    .eq("activo", true)
-    .order("nombre_categoria");
+    const { data, error } = await supabase
+      .from("categoria")
+      .select("nombre_categoria")
+      .eq("activo", true)
+      .order("nombre_categoria");
 
-  if (error) throw error;
-  return data.map((c) => c.nombre_categoria);
-},
+    if (error) throw error;
+    return data.map((c) => c.nombre_categoria);
+  },
 
   async createCategory(nombre) {
-  const { data, error } = await supabase
-    .from("categoria")
-    .insert({ nombre_categoria: nombre, activo: true })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("categoria")
+      .insert({ nombre_categoria: nombre, activo: true })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   // ==================== MARCAS ====================
   async getAllBrands() {
-  const { data, error } = await supabase
-    .from("marca")
-    .select("nombre")
-    .eq("activo", true)
-    .order("nombre");
+    const { data, error } = await supabase
+      .from("marca")
+      .select("nombre")
+      .eq("activo", true)
+      .order("nombre");
 
-  if (error) throw error;
-  return data.map((m) => m.nombre);
-},
+    if (error) throw error;
+    return data.map((m) => m.nombre);
+  },
 
   async createBrand(nombre) {
-  const { data, error } = await supabase
-    .from("marca")
-    .insert({ nombre, activo: true })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("marca")
+      .insert({ nombre, activo: true })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   // ==================== BODEGAS ====================
   async getAllWarehouses() {
-  const { data, error } = await supabase
-    .from("bodega")
-    .select("*")
-    .order("nombre");
+    const { data, error } = await supabase
+      .from("bodega")
+      .select("*")
+      .order("nombre");
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   // ==================== UBICACIONES ====================
   async getAllLocations() {
-  const { data, error } = await supabase
-    .from("ubicacion")
-    .select("*")
-    .order("tipo", "numero", "nivel");
+    const { data, error } = await supabase
+      .from("ubicacion")
+      .select("*")
+      .order("tipo", "numero", "nivel");
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   async createLocation(locationData) {
-  const { data, error } = await supabase
-    .from("ubicacion")
-    .insert({
-      tipo: locationData.tipo,
-      numero: locationData.numero,
-      nivel: locationData.nivel,
-    })
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("ubicacion")
+      .insert({
+        tipo: locationData.tipo,
+        numero: locationData.numero,
+        nivel: locationData.nivel,
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
 
   // ==================== NOTIFICATIONS ====================
   async getNotifications(userRole) {
-  const settings = this.getSettings();
-  const showLowStock = settings.lowStockAlert !== false;
-  const showTransfers = settings.transferAlert !== false;
-  const canApprove = userRole === "ADMIN" || userRole === "SUPERVISOR";
+    const settings = this.getSettings();
+    const showLowStock = settings.lowStockAlert !== false;
+    const showTransfers = settings.transferAlert !== false;
+    const canApprove = userRole === "ADMIN" || userRole === "SUPERVISOR";
 
-  let pendingMovements = [];
-  let lowStock = [];
+    let pendingMovements = [];
+    let lowStock = [];
 
-  // 1. Get Pending Requests (If Admin/Supervisor)
-  if (showTransfers && canApprove) {
-    const { data: pending, error } = await supabase
-      .from("movimiento")
-      .select(`
+    // 1. Get Pending Requests (If Admin/Supervisor)
+    if (showTransfers && canApprove) {
+      const { data: pending, error } = await supabase
+        .from("movimiento")
+        .select(`
                 *,
                 producto(nombre),
                 solicitante: usuario!id_solicitante(nombre_completo)
             `)
-      .eq("estado", "P")
-      .order("fechahorasolicitud", { ascending: true }); // Oldest first for attention
+        .eq("estado", "P")
+        .order("fechahorasolicitud", { ascending: true }); // Oldest first for attention
 
-    if (!error && pending) {
-      // Hydrate slightly for UI compatibility
-      pendingMovements = pending.map(m => ({
-        ...m,
-        producto: m.producto || { nombre: 'Desconocido' }
-      }));
+      if (!error && pending) {
+        // Hydrate slightly for UI compatibility
+        pendingMovements = pending.map(m => ({
+          ...m,
+          producto: m.producto || { nombre: 'Desconocido' }
+        }));
+      }
     }
-  }
 
-  // 2. Get Low Stock (General alert)
-  if (showLowStock) {
-    // Complex query: products where total stock <= min stock
-    // We fetch all products with their inventory and filter in JS for now as total stock is computed
-    // Optimization: Create a DB View for low_stock_products in future
-    const products = await this.getAllProducts(); // This hydrates stock
-    const factor = (settings.stockThreshold || 100) / 100;
+    // 2. Get Low Stock (General alert)
+    if (showLowStock) {
+      // Complex query: products where total stock <= min stock
+      // We fetch all products with their inventory and filter in JS for now as total stock is computed
+      // Optimization: Create a DB View for low_stock_products in future
+      const products = await this.getAllProducts(); // This hydrates stock
+      const factor = (settings.stockThreshold || 100) / 100;
 
-    lowStock = products
-      .filter(p => p.stock_total <= (p.stock_minimo * factor))
-      .map(p => ({
-        product: p,
-        deficit: p.stock_minimo - p.stock_total
-      }))
-      .sort((a, b) => b.deficit - a.deficit);
-  }
+      lowStock = products
+        .filter(p => p.stock_total <= (p.stock_minimo * factor))
+        .map(p => ({
+          product: p,
+          deficit: p.stock_minimo - p.stock_total
+        }))
+        .sort((a, b) => b.deficit - a.deficit);
+    }
 
-  return {
-    pendingMovements,
-    lowStock,
-    count: pendingMovements.length + lowStock.length
-  };
-},
-
-// ==================== SETTINGS (localStorage) ====================
-getSettings() {
-  if (typeof window === "undefined") return {};
-  const settings = localStorage.getItem("appSettings");
-  return settings
-    ? JSON.parse(settings)
-    : {
-      lowStockAlert: true,
-      transferAlert: true,
+    return {
+      pendingMovements,
+      lowStock,
+      count: pendingMovements.length + lowStock.length
     };
-},
+  },
 
-saveSettings(settings) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("appSettings", JSON.stringify(settings));
-},
+  // ==================== SETTINGS (localStorage) ====================
+  getSettings() {
+    if (typeof window === "undefined") return {};
+    const settings = localStorage.getItem("appSettings");
+    return settings
+      ? JSON.parse(settings)
+      : {
+        lowStockAlert: true,
+        transferAlert: true,
+      };
+  },
+
+  saveSettings(settings) {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("appSettings", JSON.stringify(settings));
+  },
 
   // ==================== REQUERIMIENTOS ====================
   async getRequirements() {
-  const { data, error } = await supabase
-    .from("requerimiento")
-    .select(
-      `
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .select(
+        `
               *,
               producto(nombre),
               marca(nombre),
               solicitante: usuario!id_solicitante(nombre_completo),
               responsable: usuario!id_responsable(nombre_completo)
         `
-    )
-    .order("fechahora_requerimiento", { ascending: false });
+      )
+      .order("fechahora_requerimiento", { ascending: false });
 
-  if (error) throw error;
+    if (error) throw error;
 
-  return data.map(r => ({
-    ...r,
-    fechaHoraRequ: r.fechahora_requerimiento,
-    fechaHoraAprob: r.fechahora_aprobacion,
-    producto_nombre: r.producto?.nombre || r.nombre_producto, // Use relation or fallback text
-    marca_nombre: r.marca?.nombre || r.marca_texto,         // Use relation or fallback text
-    solicitante_nombre: r.solicitante?.nombre_completo,
-    responsable_nombre: r.responsable?.nombre_completo
-  }));
-},
+    return data.map(r => ({
+      ...r,
+      fechaHoraRequ: r.fechahora_requerimiento,
+      fechaHoraAprob: r.fechahora_aprobacion,
+      producto_nombre: r.producto?.nombre || r.nombre_producto, // Use relation or fallback text
+      marca_nombre: r.marca?.nombre || r.marca_texto,         // Use relation or fallback text
+      solicitante_nombre: r.solicitante?.nombre_completo,
+      responsable_nombre: r.responsable?.nombre_completo
+    }));
+  },
 
   async createRequirement(reqData) {
-  // reqData: { nombre_producto, codigo_producto, marca_texto, id_marca, descripcion, id_solicitante, id_responsable }
+    // reqData: { nombre_producto, codigo_producto, marca_texto, id_marca, descripcion, id_solicitante, id_responsable }
 
-  // Explicitly handle IDs vs Text based on user rules:
-  // If selected from catalog, sending ID. If manual, sending text and NULL ID.
+    // Explicitly handle IDs vs Text based on user rules:
+    // If selected from catalog, sending ID. If manual, sending text and NULL ID.
 
-  const payload = {
-    nombre_producto: reqData.nombre_producto,
-    codigo_producto: reqData.codigo_visible || reqData.codigo_producto || null, // Ensure null if 0 or undefined
-    marca_texto: reqData.marca_texto,
-    id_marca: reqData.id_marca || null,
-    descripcion: reqData.descripcion,
-    id_solicitante: reqData.id_solicitante,
-    id_responsable: reqData.id_responsable, // Creator
-    estado: 'P',
-    fechahora_requerimiento: new Date().toISOString()
-  };
+    const payload = {
+      nombre_producto: reqData.nombre_producto,
+      codigo_producto: reqData.codigo_visible || reqData.codigo_producto || null, // Ensure null if 0 or undefined
+      marca_texto: reqData.marca_texto,
+      id_marca: reqData.id_marca || null,
+      descripcion: reqData.descripcion,
+      id_solicitante: reqData.id_solicitante,
+      id_responsable: reqData.id_responsable, // Creator
+      estado: 'P',
+      fechahora_requerimiento: new Date().toISOString()
+    };
 
-  const { data, error } = await supabase
-    .from("requerimiento")
-    .insert(payload)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .insert(payload)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   async updateRequirementStatus(id, newStatus, adminId) {
-  if (!['A', 'R'].includes(newStatus)) throw new Error("Estado inválido");
+    if (!['A', 'R'].includes(newStatus)) throw new Error("Estado inválido");
 
-  const updates = {
-    estado: newStatus,
-    fechahora_aprobacion: new Date().toISOString()
-    // Note: we track who approved? The table schema didn't technically allow 'approved_by' separate from 'responsable' (creator).
-    // The user prompt said "id_responsable" in table definition. 
-    // Usually "id_responsable" is "Assigned To" or "Approved By".
-    // But in the user rules: "Operadores: Solo pueden generar requerimientos para sí mismos (id_solicitante bloqueado a su propio ID)."
-    // And "id_responsable" was not explicitly defined as "approver".
-    // However, typical flow is Requester -> Approver.
-    // If `id_responsable` was set at creation, it might be the "Manager" responsible for the *request*.
-    // We will leave `id_responsable` as is (set at creation) unless the user wants to track *who* clicked approve in a separate column.
-    // For now, only updating status and time.
-  };
+    const updates = {
+      estado: newStatus,
+      fechahora_aprobacion: new Date().toISOString()
+      // Note: we track who approved? The table schema didn't technically allow 'approved_by' separate from 'responsable' (creator).
+      // The user prompt said "id_responsable" in table definition. 
+      // Usually "id_responsable" is "Assigned To" or "Approved By".
+      // But in the user rules: "Operadores: Solo pueden generar requerimientos para sí mismos (id_solicitante bloqueado a su propio ID)."
+      // And "id_responsable" was not explicitly defined as "approver".
+      // However, typical flow is Requester -> Approver.
+      // If `id_responsable` was set at creation, it might be the "Manager" responsible for the *request*.
+      // We will leave `id_responsable` as is (set at creation) unless the user wants to track *who* clicked approve in a separate column.
+      // For now, only updating status and time.
+    };
 
-  const { data, error } = await supabase
-    .from("requerimiento")
-    .update(updates)
-    .eq("id_requerimiento", id)
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from("requerimiento")
+      .update(updates)
+      .eq("id_requerimiento", id)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data;
+  },
 
   async revertRequirement(id) {
-  const { error } = await supabase
-    .from("requerimiento")
-    .update({
-      estado: 'P',
-      fechahora_aprobacion: null
-    })
-    .eq("id_requerimiento", id);
+    const { error } = await supabase
+      .from("requerimiento")
+      .update({
+        estado: 'P',
+        fechahora_aprobacion: null
+      })
+      .eq("id_requerimiento", id);
 
-  if (error) throw error;
-  return true;
-}
+    if (error) throw error;
+    return true;
+  }
 };
