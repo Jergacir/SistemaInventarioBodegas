@@ -336,7 +336,7 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Solicitante</label>
                     <select
                         value={formData.requesterId}
-                        onChange={e => setFormData({ ...formData, requesterId: e.target.value })}
+                        onChange={e => setFormData(prev => ({ ...prev, requesterId: e.target.value }))}
                         style={inputStyle}
                     >
                         {users.map(u => (
@@ -356,13 +356,16 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                         <input
                             type="checkbox"
                             checked={formData.isNewProduct}
-                            onChange={e => setFormData({
-                                ...formData,
+                            onChange={e => setFormData(prev => ({
+                                ...prev,
                                 isNewProduct: e.target.checked,
                                 productId: '',
                                 productName: '',
-                                isNewBrand: e.target.checked ? formData.isNewBrand : false
-                            })}
+                                // If switching to new product, clear brand selection unless it was manually set? 
+                                // Better to reset to avoid confusion.
+                                brandId: '',
+                                isNewBrand: false
+                            }))}
                             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                         />
                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Es nuevo?</span>
@@ -375,7 +378,7 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                             type="text"
                             placeholder="Nombre del producto nuevo..."
                             value={formData.productName}
-                            onChange={e => setFormData({ ...formData, productName: e.target.value })}
+                            onChange={e => setFormData(prev => ({ ...prev, productName: e.target.value }))}
                             style={inputStyle}
                             autoFocus
                         />
@@ -389,13 +392,15 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                             value={formData.productId}
                             onChange={e => {
                                 const pid = e.target.value;
-                                const prod = products.find(p => p.codigo_producto == pid);
-                                setFormData({
-                                    ...formData,
+                                const prod = products.find(p => String(p.codigo_producto) === String(pid));
+                                setFormData(prev => ({
+                                    ...prev,
                                     productId: pid,
+                                    // Pre-fill brand if product has one, otherwise leave clean for user to select
                                     brandId: prod?.id_marca || '',
+                                    brandName: '', // Clear custom brand name
                                     isNewBrand: false
-                                });
+                                }));
                             }}
                             style={inputStyle}
                         >
@@ -414,50 +419,40 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
             <div style={sectionStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Marca</label>
-                    {(formData.isNewProduct) && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input
-                                type="checkbox"
-                                checked={formData.isNewBrand}
-                                onChange={e => setFormData({ ...formData, isNewBrand: e.target.checked, brandId: '', brandName: '' })}
-                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Nueva marca?</span>
-                        </label>
-                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                            type="checkbox"
+                            checked={formData.isNewBrand}
+                            onChange={e => setFormData(prev => ({
+                                ...prev,
+                                isNewBrand: e.target.checked,
+                                brandId: '', // Reset selection if switching to new
+                                brandName: '' // Reset text
+                            }))}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Nueva marca?</span>
+                    </label>
                 </div>
 
-                {!formData.isNewProduct ? (
-                    <div style={{
-                        padding: '10px',
-                        backgroundColor: 'var(--bg-card)',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-light)',
-                        color: 'var(--text-secondary)',
-                        fontSize: '14px',
-                        minHeight: '42px',
-                        display: 'flex',
-                        alignItems: 'center'
-                    }}>
-                        {products.find(p => p.codigo_producto == formData.productId)?.marca || (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Selecciona un producto arriba</span>
-                        )}
-                    </div>
-                ) : formData.isNewBrand ? (
+                {formData.isNewBrand ? (
                     <input
                         type="text"
                         placeholder="Nombre de la marca..."
                         value={formData.brandName}
-                        onChange={e => setFormData({ ...formData, brandName: e.target.value })}
+                        onChange={e => setFormData(prev => ({ ...prev, brandName: e.target.value }))}
                         style={inputStyle}
                     />
                 ) : (
                     <select
                         value={formData.brandId}
-                        onChange={e => setFormData({ ...formData, brandId: e.target.value })}
+                        onChange={e => setFormData(prev => ({ ...prev, brandId: e.target.value }))}
                         style={inputStyle}
+                        disabled={false} // Always allow selection
                     >
-                        <option value="">Seleccionar marca existente...</option>
+                        <option value="">
+                            {formData.productId && !formData.brandId ? 'Elige una marca (Opcional)' : 'Seleccionar marca...'}
+                        </option>
                         {brands.map(b => (
                             <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
                         ))}
@@ -469,7 +464,7 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Detalles Adicionales</label>
                 <textarea
                     value={formData.description}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     rows={3}
                     placeholder="Descripción, link de referencia, o motivo de la solicitud..."
                     style={{ ...inputStyle, resize: 'vertical' }}
