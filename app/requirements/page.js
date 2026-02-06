@@ -361,7 +361,9 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                                 isNewProduct: e.target.checked,
                                 productId: '',
                                 productName: '',
-                                isNewBrand: e.target.checked ? formData.isNewBrand : false
+                                isNewBrand: e.target.checked ? formData.isNewBrand : false,
+                                brandId: '',
+                                brandName: ''
                             })}
                             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                         />
@@ -411,23 +413,53 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
             </div>
 
             {/* Brand Section */}
-            <div style={sectionStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Marca</label>
-                    {(formData.isNewProduct) && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input
-                                type="checkbox"
-                                checked={formData.isNewBrand}
-                                onChange={e => setFormData({ ...formData, isNewBrand: e.target.checked, brandId: '', brandName: '' })}
-                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Nueva marca?</span>
-                        </label>
+            {(formData.isNewProduct) && (
+                <div style={sectionStyle}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Marca</label>
+
+                        <Button
+                            variant="text"
+                            type="button"
+                            onClick={() => setFormData({
+                                ...formData,
+                                isNewBrand: !formData.isNewBrand,
+                                brandId: '',
+                                brandName: ''
+                            })}
+                            style={{ fontSize: '13px', color: 'var(--color-primary)', height: 'auto', padding: '0' }}
+                        >
+                            {formData.isNewBrand ? 'Seleccionar existente' : 'Crear nueva marca'}
+                        </Button>
+                    </div>
+
+                    {formData.isNewBrand ? (
+                        <input
+                            type="text"
+                            placeholder="Nombre de la marca..."
+                            value={formData.brandName}
+                            onChange={e => setFormData({ ...formData, brandName: e.target.value })}
+                            style={inputStyle}
+                        />
+                    ) : (
+                        <select
+                            value={formData.brandId}
+                            onChange={e => setFormData({ ...formData, brandId: e.target.value })}
+                            style={inputStyle}
+                        >
+                            <option value="">Seleccionar marca existente...</option>
+                            {brands.map(b => (
+                                <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
+                            ))}
+                        </select>
                     )}
                 </div>
+            )}
 
-                {!formData.isNewProduct ? (
+            {/* Read-only brand for existing products */}
+            {(!formData.isNewProduct && formData.productId) && (
+                <div style={sectionStyle}>
+                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '12px', display: 'block' }}>Marca</label>
                     <div style={{
                         padding: '10px',
                         backgroundColor: 'var(--bg-card)',
@@ -439,31 +471,10 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                         display: 'flex',
                         alignItems: 'center'
                     }}>
-                        {products.find(p => p.codigo_producto == formData.productId)?.marca || (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Selecciona un producto arriba</span>
-                        )}
+                        {products.find(p => p.codigo_producto == formData.productId)?.marca || 'General'}
                     </div>
-                ) : formData.isNewBrand ? (
-                    <input
-                        type="text"
-                        placeholder="Nombre de la marca..."
-                        value={formData.brandName}
-                        onChange={e => setFormData({ ...formData, brandName: e.target.value })}
-                        style={inputStyle}
-                    />
-                ) : (
-                    <select
-                        value={formData.brandId}
-                        onChange={e => setFormData({ ...formData, brandId: e.target.value })}
-                        style={inputStyle}
-                    >
-                        <option value="">Seleccionar marca existente...</option>
-                        {brands.map(b => (
-                            <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
-                        ))}
-                    </select>
-                )}
-            </div>
+                </div>
+            )}
 
             <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Detalles Adicionales</label>
