@@ -20,8 +20,10 @@ export default function RequirementsPage() {
     const [currentUser, setCurrentUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Filter State
-    const [statusFilter, setStatusFilter] = useState('P'); // Default Pending
+    // Filter State (Formerly in HistoryModal)
+    const [filterStart, setFilterStart] = useState('');
+    const [filterEnd, setFilterEnd] = useState('');
+    const [filterStatus, setFilterStatus] = useState('ALL'); // Default ALL for history view
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -68,7 +70,7 @@ export default function RequirementsPage() {
                 setBrands([]);
             }
 
-            // 3: Users
+            // 3: Users (Needed for Create Form)
             if (results[3].status === 'fulfilled') {
                 setUsers(results[3].value || []);
             } else {
@@ -102,6 +104,7 @@ export default function RequirementsPage() {
                 await DB.updateRequirementStatus(req.id_requerimiento, 'A', currentUser.id_usuario);
                 showToast('Aprobado', 'Requerimiento aprobado', 'success');
                 loadInitialData();
+                closeModal(); // Close detail modal if open
             } catch (error) {
                 showToast('Error', 'Falló la aprobación', 'error');
             }
@@ -114,6 +117,7 @@ export default function RequirementsPage() {
                 await DB.updateRequirementStatus(req.id_requerimiento, 'R', currentUser.id_usuario);
                 showToast('Rechazado', 'Requerimiento rechazado', 'info');
                 loadInitialData();
+                closeModal(); // Close detail modal if open
             } catch (error) {
                 showToast('Error', 'Falló el rechazo', 'error');
             }
@@ -126,6 +130,7 @@ export default function RequirementsPage() {
                 await DB.revertRequirement(req.id_requerimiento);
                 showToast('Revertido', 'Requerimiento vuelto a pendiente', 'success');
                 loadInitialData();
+                closeModal(); // Close detail modal if open
             } catch (error) {
                 showToast('Error', 'Falló la reversión', 'error');
             }
@@ -146,144 +151,22 @@ export default function RequirementsPage() {
         );
     };
 
-    const openHistoryModal = () => {
+    const openDetailModal = (req) => {
         openModal(
-            'Historial de Requerimientos',
-            <RequirementsHistoryModal
-                requirements={requirements}
-                users={users}
+            'Detalle del Requerimiento',
+            <RequirementDetailModal
+                req={req}
+                currentUser={currentUser}
+                onApprove={() => handleApprove(req)}
+                onReject={() => handleReject(req)}
+                onRevert={() => handleRevert(req)}
                 closeModal={closeModal}
-            />,
-            'large' // Use a larger modal for the table
+            />
         );
     };
 
-    const isAdmin = currentUser?.rol === 'ADMIN';
-
-    const filteredReqs = useMemo(() => {
-        if (statusFilter === 'ALL') return requirements;
-        return requirements.filter(r => r.estado === statusFilter);
-    }, [requirements, statusFilter]);
-
-    return (
-        <MainLayout>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Requerimientos</h1>
-                    <p className="page-subtitle">Solicitud de productos nuevos o stock</p>
-                </div>
-                <div className="page-actions" style={{ gap: '10px', display: 'flex' }}>
-                    <Button variant="secondary" onClick={openHistoryModal}>
-                        <Icons.History size={18} />
-                        Ver Historial
-                    </Button>
-                    <Button variant="primary" onClick={openCreateModal}>
-                        <Icons.Plus size={18} />
-                        Nuevo Requerimiento
-                    </Button>
-                </div>
-            </div>
-
-            {/* Filters */}
-            <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
-                {[
-                    { id: 'P', label: 'Pendientes' },
-                    { id: 'A', label: 'Aprobados' },
-                    { id: 'R', label: 'Rechazados' },
-                    { id: 'ALL', label: 'Todos' }
-                ].map(f => (
-                    <Button
-                        key={f.id}
-                        variant={statusFilter === f.id ? 'primary' : 'secondary'}
-                        onClick={() => setStatusFilter(f.id)}
-                        style={{ borderRadius: '20px', padding: '6px 16px' }}
-                    >
-                        {f.label}
-                    </Button>
-                ))}
-            </div>
-
-            <Card>
-                {isLoading ? (
-                    <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
-                ) : filteredReqs.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        No hay requerimientos en este estado.
-                    </div>
-                ) : (
-                    <div className="req-list">
-                        {filteredReqs.map(req => (
-                            <div key={req.id_requerimiento} style={{
-                                padding: '16px',
-                                borderBottom: '1px solid var(--border-light)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: '15px'
-                            }}>
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' }}>
-                                        <div style={{ fontWeight: 600, fontSize: '16px' }}>
-                                            {req.producto_nombre}
-                                        </div>
-                                        {req.codigo_producto ? (
-                                            <Badge variant="completed">Catálogo</Badge>
-                                        ) : (
-                                            <Badge variant="pending">Nuevo</Badge>
-                                        )}
-                                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                                            {req.marca_nombre}
-                                        </span>
-                                    </div>
-                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                        {req.descripcion || 'Sin descripción'}
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                                        <span>Solicita: <strong>{req.solicitante_nombre}</strong></span>
-                                        <span>Fecha: {Helpers.formatDateTime(req.fechaHoraRequ)}</span>
-                                    </div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                                    <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
-
-                                    {isAdmin && (
-                                        <div style={{ display: 'flex', gap: '5px' }}>
-                                            {req.estado === 'P' && (
-                                                <>
-                                                    <Button variant="text" onClick={() => handleApprove(req)} title="Aprobar" style={{ color: 'var(--color-success)' }}>
-                                                        <Icons.Check size={18} />
-                                                    </Button>
-                                                    <Button variant="text" onClick={() => handleReject(req)} title="Rechazar" style={{ color: 'var(--color-danger)' }}>
-                                                        <Icons.Close size={18} />
-                                                    </Button>
-                                                </>
-                                            )}
-                                            {req.estado !== 'P' && (
-                                                <Button variant="text" onClick={() => handleRevert(req)} title="Revertir" style={{ color: 'var(--color-warning)' }}>
-                                                    <Icons.Refresh size={18} />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </Card>
-        </MainLayout>
-    );
-}
-
-// Sub-component for History Modal
-const RequirementsHistoryModal = ({ requirements, users, closeModal }) => {
-    const [filterStart, setFilterStart] = useState('');
-    const [filterEnd, setFilterEnd] = useState('');
-    const [filterStatus, setFilterStatus] = useState('ALL');
-
     // Filter Logic
-    const filteredHistory = useMemo(() => {
+    const filteredReqs = useMemo(() => {
         return requirements.filter(req => {
             // Status Filter
             if (filterStatus !== 'ALL' && req.estado !== filterStatus) return false;
@@ -309,7 +192,7 @@ const RequirementsHistoryModal = ({ requirements, users, closeModal }) => {
         try {
             const XLSX = (await import('xlsx'));
 
-            const data = filteredHistory.map(req => ({
+            const data = filteredReqs.map(req => ({
                 ID: req.id_requerimiento,
                 Producto: req.producto_nombre,
                 Codigo: req.codigo_producto || 'N/A',
@@ -323,28 +206,55 @@ const RequirementsHistoryModal = ({ requirements, users, closeModal }) => {
 
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Historial Requerimientos");
-            XLSX.writeFile(wb, `Historial_Requerimientos_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "Requerimientos");
+            XLSX.writeFile(wb, `Requerimientos_${new Date().toISOString().split('T')[0]}.xlsx`);
         } catch (error) {
             console.error("Export failed:", error);
-            alert("Error al exportar a Excel");
+            showToast('Error', 'Error al exportar a Excel', 'error');
         }
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
-            {/* Filters */}
+        <MainLayout>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">Requerimientos</h1>
+                    <p className="page-subtitle">Gestionar solicitudes y stock</p>
+                </div>
+                <div className="page-actions">
+                    <Button variant="primary" onClick={openCreateModal}>
+                        <Icons.Plus size={18} />
+                        Nuevo Requerimiento
+                    </Button>
+                </div>
+            </div>
+
+            {/* Filters Section (Integrated into Page) */}
             <div style={{
                 display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'end',
-                padding: '16px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-light)'
+                marginBottom: '20px', padding: '16px', background: 'var(--bg-card)',
+                borderRadius: '8px', border: '1px solid var(--border-light)', boxShadow: 'var(--shadow-sm)'
             }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Estado</label>
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-subtle)' }}
+                    >
+                        <option value="ALL">Todos</option>
+                        <option value="P">Pendientes</option>
+                        <option value="A">Aprobados</option>
+                        <option value="R">Rechazados</option>
+                    </select>
+                </div>
                 <div style={{ flex: 1, minWidth: '150px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Desde</label>
                     <input
                         type="date"
                         value={filterStart}
                         onChange={e => setFilterStart(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-subtle)' }}
                     />
                 </div>
                 <div style={{ flex: 1, minWidth: '150px' }}>
@@ -353,55 +263,136 @@ const RequirementsHistoryModal = ({ requirements, users, closeModal }) => {
                         type="date"
                         value={filterEnd}
                         onChange={e => setFilterEnd(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-subtle)' }}
                     />
-                </div>
-                <div style={{ flex: 1, minWidth: '150px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Estado</label>
-                    <select
-                        value={filterStatus}
-                        onChange={e => setFilterStatus(e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                    >
-                        <option value="ALL">Todos</option>
-                        <option value="P">Pendientes</option>
-                        <option value="A">Aprobados</option>
-                        <option value="R">Rechazados</option>
-                    </select>
                 </div>
                 <Button variant="outline" onClick={handleExport} style={{ height: '38px' }}>
                     <Icons.Export size={16} /> Exportar
                 </Button>
             </div>
 
-            {/* List */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {filteredHistory.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                        No se encontraron registros.
+            <Card>
+                {isLoading ? (
+                    <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>
+                ) : filteredReqs.length === 0 ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No hay requerimientos que coincidan con los filtros.
                     </div>
                 ) : (
-                    filteredHistory.map(req => (
-                        <div key={req.id_requerimiento} style={{
-                            padding: '12px', border: '1px solid var(--border-light)', borderRadius: '6px',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)'
-                        }}>
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>
-                                    {req.producto_nombre} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({req.marca_nombre})</span>
+                    <div className="req-list">
+                        {filteredReqs.map(req => (
+                            <div
+                                key={req.id_requerimiento}
+                                onClick={() => openDetailModal(req)}
+                                style={{
+                                    padding: '16px',
+                                    borderBottom: '1px solid var(--border-light)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    gap: '15px',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-subtle)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' }}>
+                                        <div style={{ fontWeight: 600, fontSize: '16px' }}>
+                                            {req.producto_nombre}
+                                        </div>
+                                        {req.codigo_producto ? (
+                                            <Badge variant="completed">Catálogo</Badge>
+                                        ) : (
+                                            <Badge variant="pending">Nuevo</Badge>
+                                        )}
+                                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                            {req.marca_nombre}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        <span>Solicita: <strong>{req.solicitante_nombre}</strong></span>
+                                        <span>Fecha: {Helpers.formatDateTime(req.fechaHoraRequ)}</span>
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                    {Helpers.formatDateTime(req.fechaHoraRequ)} · Por <strong>{req.solicitante_nombre}</strong>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                    <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
+                                    <Icons.ChevronRight size={18} color="var(--text-muted)" />
                                 </div>
                             </div>
-                            <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
-                        </div>
-                    ))
+                        ))}
+                    </div>
                 )}
+            </Card>
+        </MainLayout>
+    );
+}
+
+// Sub-component for Detailed View (Modal)
+const RequirementDetailModal = ({ req, currentUser, onApprove, onReject, onRevert, closeModal }) => {
+    const isAdmin = currentUser?.rol === 'ADMIN';
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Producto</label>
+                    <div style={{ fontWeight: 600, fontSize: '16px' }}>{req.producto_nombre}</div>
+                    {req.codigo_producto && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Código: {req.codigo_visible}</div>}
+                </div>
+                <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Marca</label>
+                    <div style={{ fontSize: '14px' }}>{req.marca_nombre}</div>
+                </div>
+                <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Solicitante</label>
+                    <div style={{ fontSize: '14px' }}>{req.solicitante_nombre}</div>
+                </div>
+                <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Fecha Solicitud</label>
+                    <div style={{ fontSize: '14px' }}>{Helpers.formatDateTime(req.fechaHoraRequ)}</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Descripción / Detalles</label>
+                    <div style={{ padding: '10px', background: 'var(--bg-subtle)', borderRadius: '6px', fontSize: '14px', minHeight: '60px' }}>
+                        {req.descripcion || 'Sin descripción adicional.'}
+                    </div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Estado Actual</label>
+                    <StatusBadge status={req.estado === 'A' ? 'COMPLETADO' : req.estado === 'R' ? 'RECHAZADO' : 'PENDIENTE'} />
+                    {req.responsable_nombre && (
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Gestionado por: {req.responsable_nombre}
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '15px', display: 'flex', justifyContent: 'flex-end' }}>
-                <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
+            {isAdmin && (
+                <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    {req.estado === 'P' && (
+                        <>
+                            <Button variant="danger" onClick={onReject}>
+                                <Icons.Close size={16} /> Rechazar
+                            </Button>
+                            <Button variant="success" onClick={onApprove}>
+                                <Icons.Check size={16} /> Aprobar
+                            </Button>
+                        </>
+                    )}
+                    {req.estado !== 'P' && (
+                        <Button variant="outline" onClick={onRevert}>
+                            <Icons.Refresh size={16} /> Revertir a Pendiente
+                        </Button>
+                    )}
+                </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                <Button variant="secondary" onClick={closeModal} style={{ width: '100%' }}>Cerrar</Button>
             </div>
         </div>
     );
@@ -650,3 +641,4 @@ const RequirementForm = ({ products, brands, users, currentUser, onSubmit, close
         </form>
     );
 };
+
