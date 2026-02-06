@@ -11,6 +11,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata = {
   title: "Sistema de Inventarios",
   description: "Bodega Instrumentación - Sistema de Gestión",
+  icons: {
+    icon: '/icon.ico',
+  },
 };
 
 export default function RootLayout({ children }) {
