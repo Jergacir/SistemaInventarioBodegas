@@ -459,6 +459,29 @@ export const SupabaseDB = {
     return data;
   },
 
+  async getMovementsByProduct(productId) {
+    const { data, error } = await supabase
+      .from("movimiento")
+      .select(`
+        *,
+        producto(nombre),
+        bodega_origen: bodega!id_bodega_origen(nombre),
+        bodega_destino: bodega!id_bodega_destino(nombre),
+        solicitante: usuario!id_solicitante(nombre_completo),
+        responsable: usuario!id_responsable(nombre_completo)
+      `)
+      .eq("codigo_producto", productId) // Assuming productId matches codigo_producto/id
+      .order("fechahorasolicitud", { ascending: false });
+
+    if (error) throw error;
+
+    return data.map(m => ({
+      ...m,
+      fechaHoraSolicitud: m.fechahorasolicitud,
+      fechaHoraAprobacion: m.fechahoraaprobacion
+    }));
+  },
+
   async createMovement(movementData) {
     const { data, error } = await supabase
       .from("movimiento")
@@ -672,7 +695,7 @@ export const SupabaseDB = {
       }
     }
 
-    const newCode = `ENT-${String(nextSequence).padStart(5, '0')}`;
+    const newCode = `ENT - ${String(nextSequence).padStart(5, '0')}`;
 
     // 2. Create the movement
     const { data: movement, error } = await supabase
@@ -723,7 +746,7 @@ export const SupabaseDB = {
         .single();
 
       if (!currentInv || currentInv.stock < exitData.cantidad) {
-        throw new Error(`Stock insuficiente. Disponible: ${currentInv?.stock || 0}`);
+        throw new Error(`Stock insuficiente.Disponible: ${currentInv?.stock || 0}`);
       }
     }
 
@@ -744,7 +767,7 @@ export const SupabaseDB = {
       }
     }
 
-    const newCode = `SAL-${String(nextSequence).padStart(5, '0')}`;
+    const newCode = `SAL-${String(nextSequence).padStart(5, '0')} `;
 
     // 2. Create Movement
     const { data: movement, error } = await supabase
@@ -791,7 +814,7 @@ export const SupabaseDB = {
           codigo_producto: exitData.codigo_producto,
           id_bodega_destino: 2, // Bodega Instrumentación
           estado: exitData.estado, // Same status (likely 'C')
-          notas: `Traspaso automático desde Salida ${newCode}. ${exitData.notas || ''}`.trim(),
+          notas: `Traspaso automático desde Salida ${newCode}. ${exitData.notas || ''} `.trim(),
           id_responsable: exitData.id_responsable,
           id_solicitante: exitData.id_solicitante
         });
@@ -905,10 +928,10 @@ export const SupabaseDB = {
       const { data: pending, error } = await supabase
         .from("movimiento")
         .select(`
-                *,
-                producto(nombre),
-                solicitante: usuario!id_solicitante(nombre_completo)
-            `)
+  *,
+  producto(nombre),
+  solicitante: usuario!id_solicitante(nombre_completo)
+    `)
         .eq("estado", "P")
         .order("fechahorasolicitud", { ascending: true }); // Oldest first for attention
 
@@ -968,11 +991,11 @@ export const SupabaseDB = {
       .from("requerimiento")
       .select(
         `
-              *,
-              producto(nombre),
-              marca(nombre),
-              solicitante: usuario!id_solicitante(nombre_completo),
-              responsable: usuario!id_responsable(nombre_completo)
+    *,
+    producto(nombre),
+    marca(nombre),
+    solicitante: usuario!id_solicitante(nombre_completo),
+      responsable: usuario!id_responsable(nombre_completo)
         `
       )
       .order("fechahora_requerimiento", { ascending: false });
