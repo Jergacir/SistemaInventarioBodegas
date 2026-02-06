@@ -51,20 +51,48 @@ export default function RequirementsPage() {
     const loadInitialData = async () => {
         setIsLoading(true);
         try {
-            const [reqs, prods, brs, usrs] = await Promise.all([
+            const results = await Promise.allSettled([
                 DB.getRequirements(),
                 DB.getAllProducts(),
                 DB.supabase.from('marca').select('*').eq('activo', true),
                 DB.getAllUsers()
             ]);
 
-            setRequirements(reqs);
-            setProducts(prods);
-            setBrands(brs.data || []);
-            setUsers(usrs);
+            // 0: Requirements
+            if (results[0].status === 'fulfilled') {
+                setRequirements(results[0].value);
+            } else {
+                console.error("Failed to load requirements:", results[0].reason);
+                showToast('Error', 'No se pudieron cargar los requerimientos', 'error');
+            }
+
+            // 1: Products
+            if (results[1].status === 'fulfilled') {
+                setProducts(results[1].value || []);
+            } else {
+                console.error("Failed to load products:", results[1].reason);
+                setProducts([]); // Safe fallback
+            }
+
+            // 2: Brands
+            if (results[2].status === 'fulfilled') {
+                setBrands(results[2].value.data || []);
+            } else {
+                console.error("Failed to load brands:", results[2].reason);
+                setBrands([]);
+            }
+
+            // 3: Users
+            if (results[3].status === 'fulfilled') {
+                setUsers(results[3].value || []);
+            } else {
+                console.error("Failed to load users:", results[3].reason);
+                setUsers([]);
+            }
+
         } catch (error) {
-            console.error("Error loading data:", error);
-            showToast('Error', 'No se pudo cargar la información', 'error');
+            console.error("Unexpected error loading data:", error);
+            showToast('Error', 'Error inesperado cargando datos', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -88,38 +116,35 @@ export default function RequirementsPage() {
         }
 
         try {
-            const selectedProduct = products.find(p => p.codigo_producto === parseInt(formData.productId));
-            const selectedBrand = brands.find(b => b.id_marca === parseInt(formData.brandId));
+            const selectedProduct = products.find(p => p.codigo_producto == formData.productId);
+            const selectedBrand = brands.find(b => b.id_marca == formData.brandId);
 
             const payload = {
                 nombre_producto: formData.isNewProduct ? formData.productName : selectedProduct.nombre,
                 codigo_producto: formData.isNewProduct ? null : parseInt(formData.productId),
                 codigo_visible: !formData.isNewProduct ? selectedProduct.codigo_visible : null,
-                marca_texto: formData.isNewBrand ? formData.brandName : selectedBrand?.nombre || 'General', // Fallback if no brand selected? Assuming existing products have brand
+                marca_texto: formData.isNewBrand ? formData.brandName : selectedBrand?.nombre || 'General',
                 id_marca: formData.isNewBrand ? null : (formData.brandId ? parseInt(formData.brandId) : (selectedProduct?.id_marca || null)),
                 descripcion: formData.description,
                 id_solicitante: formData.requesterId,
-                id_responsable: currentUser.id_usuario // Creator
+                id_responsable: currentUser.id_usuario
             };
 
-            // If existing product selected, use its brand name if not explicitly overridden (though UI doesn't allow overriding existing product brand easily, simplifying logic)
+            // Enhanced Brand Logic for Consistency
             if (!formData.isNewProduct && selectedProduct) {
                 payload.marca_texto = selectedProduct.marca || 'Desconocida';
                 payload.id_marca = selectedProduct.id_marca;
             } else if (!formData.isNewBrand && selectedBrand) {
                 payload.marca_texto = selectedBrand.nombre;
             } else if (!formData.isNewBrand && !selectedBrand && formData.isNewProduct) {
-                // Creating new product but didn't select brand? Default to General or require it?
-                // Let's assume generic text if missing
                 if (!payload.marca_texto) payload.marca_texto = 'Generica';
             }
 
             await DB.createRequirement(payload);
             showToast('Éxito', 'Requerimiento creado correctamente', 'success');
             closeModal();
-            loadInitialData(); // Refresh list
+            loadInitialData();
 
-            // Reset form
             setFormData({
                 isNewProduct: false,
                 isNewBrand: false,
@@ -309,28 +334,19 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
     // Only Admin/Supervisor can change requester
     const canChangeRequester = ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol);
 
-    // Helper for input styles
     const inputStyle = {
-        width: '100%',
-        padding: '10px',
-        borderRadius: '6px',
-        border: '1px solid var(--border-color)',
-        backgroundColor: 'var(--bg-card)',
-        color: 'var(--text-primary)',
-        fontSize: '14px'
+        width: '100%', padding: '10px', borderRadius: '6px',
+        border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)',
+        color: 'var(--text-primary)', fontSize: '14px'
     };
 
-    // Helper for section container
     const sectionStyle = {
-        padding: '16px',
-        backgroundColor: 'var(--bg-subtle)',
-        borderRadius: '8px',
-        border: '1px solid var(--border-light)'
+        padding: '16px', backgroundColor: 'var(--bg-subtle)',
+        borderRadius: '8px', border: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '12px'
     };
 
     return (
         <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Requester Selection */}
             {canChangeRequester && (
                 <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Solicitante</label>
@@ -338,7 +354,9 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                         value={formData.requesterId}
                         onChange={e => setFormData({ ...formData, requesterId: e.target.value })}
                         style={inputStyle}
+                        disabled={users.length === 0}
                     >
+                        {users.length === 0 && <option>Cargando usuarios...</option>}
                         {users.map(u => (
                             <option key={u.id_usuario} value={u.id_usuario}>{u.nombre_completo}</option>
                         ))}
@@ -346,135 +364,136 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                 </div>
             )}
 
-            {/* Product Section */}
-            <div style={sectionStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Producto</label>
-
-                    {/* Toggle Switch Style */}
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                        <input
-                            type="checkbox"
-                            checked={formData.isNewProduct}
-                            onChange={e => setFormData({
-                                ...formData,
-                                isNewProduct: e.target.checked,
-                                productId: '',
-                                productName: '',
-                                isNewBrand: e.target.checked ? formData.isNewBrand : false,
-                                brandId: '',
-                                brandName: ''
-                            })}
-                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Es nuevo?</span>
-                    </label>
-                </div>
-
-                {formData.isNewProduct ? (
-                    <div className="animate-fade-in">
-                        <input
-                            type="text"
-                            placeholder="Nombre del producto nuevo..."
-                            value={formData.productName}
-                            onChange={e => setFormData({ ...formData, productName: e.target.value })}
-                            style={inputStyle}
-                            autoFocus
-                        />
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                            Este producto no se agregará al catálogo oficial automáticamente.
-                        </div>
-                    </div>
-                ) : (
-                    <div>
-                        <select
-                            value={formData.productId}
-                            onChange={e => {
-                                const pid = e.target.value;
-                                const prod = products.find(p => p.codigo_producto == pid);
-                                setFormData({
-                                    ...formData,
-                                    productId: pid,
-                                    brandId: prod?.id_marca || '',
-                                    isNewBrand: false
-                                });
-                            }}
-                            style={inputStyle}
-                        >
-                            <option value="">Seleccionar del catálogo...</option>
-                            {products.map(p => (
-                                <option key={p.codigo_producto} value={p.codigo_producto}>
-                                    {p.nombre} {p.marca ? `- ${p.marca}` : ''} ({p.codigo_visible})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+            {/* Type Selection Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
+                <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isNewProduct: false })}
+                    style={{
+                        flex: 1, padding: '10px', background: 'transparent',
+                        borderBottom: !formData.isNewProduct ? '2px solid var(--color-primary)' : 'none',
+                        color: !formData.isNewProduct ? 'var(--color-primary)' : 'var(--text-secondary)',
+                        fontWeight: !formData.isNewProduct ? 600 : 400,
+                        cursor: 'pointer'
+                    }}
+                >
+                    Solicitar Stock
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, isNewProduct: true, productId: '', brandId: '' })}
+                    style={{
+                        flex: 1, padding: '10px', background: 'transparent',
+                        borderBottom: formData.isNewProduct ? '2px solid var(--color-primary)' : 'none',
+                        color: formData.isNewProduct ? 'var(--color-primary)' : 'var(--text-secondary)',
+                        fontWeight: formData.isNewProduct ? 600 : 400,
+                        cursor: 'pointer'
+                    }}
+                >
+                    Producto Nuevo
+                </button>
             </div>
 
-            {/* Brand Section */}
-            {(formData.isNewProduct) && (
-                <div style={sectionStyle}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Marca</label>
+            <div style={sectionStyle}>
+                {!formData.isNewProduct ? (
+                    // EXISTING PRODUCT MODE
+                    <>
+                        <div>
+                            <label style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px', display: 'block' }}>Producto del Catálogo</label>
+                            <select
+                                value={formData.productId}
+                                onChange={e => {
+                                    const pid = e.target.value;
+                                    const prod = products.find(p => p.codigo_producto == pid);
+                                    setFormData({
+                                        ...formData,
+                                        productId: pid,
+                                        brandId: prod?.id_marca || '',
+                                        isNewBrand: false
+                                    });
+                                }}
+                                style={inputStyle}
+                                disabled={products.length === 0}
+                            >
+                                <option value="">Seleccionar del catálogo...</option>
+                                {products.length === 0 && <option disabled>No hay productos cargados</option>}
+                                {products.map(p => (
+                                    <option key={p.codigo_producto} value={p.codigo_producto}>
+                                        {p.nombre} {p.marca ? `- ${p.marca}` : ''} ({p.codigo_visible})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                        <Button
-                            variant="text"
-                            type="button"
-                            onClick={() => setFormData({
-                                ...formData,
-                                isNewBrand: !formData.isNewBrand,
-                                brandId: '',
-                                brandName: ''
-                            })}
-                            style={{ fontSize: '13px', color: 'var(--color-primary)', height: 'auto', padding: '0' }}
-                        >
-                            {formData.isNewBrand ? 'Seleccionar existente' : 'Crear nueva marca'}
-                        </Button>
-                    </div>
+                        {formData.productId && (
+                            <div>
+                                <label style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>Marca (Automática)</label>
+                                <div style={{
+                                    padding: '8px 12px', background: 'var(--bg-card)', borderRadius: '4px',
+                                    border: '1px solid var(--border-light)', color: 'var(--text-secondary)', fontSize: '14px'
+                                }}>
+                                    {products.find(p => p.codigo_producto == formData.productId)?.marca || 'General'}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    // NEW PRODUCT MODE
+                    <>
+                        <div>
+                            <label style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px', display: 'block' }}>Nombre del Producto</label>
+                            <input
+                                type="text"
+                                placeholder="Ej: Taladro Percutor 500W..."
+                                value={formData.productName}
+                                onChange={e => setFormData({ ...formData, productName: e.target.value })}
+                                style={inputStyle}
+                                autoFocus
+                            />
+                        </div>
 
-                    {formData.isNewBrand ? (
-                        <input
-                            type="text"
-                            placeholder="Nombre de la marca..."
-                            value={formData.brandName}
-                            onChange={e => setFormData({ ...formData, brandName: e.target.value })}
-                            style={inputStyle}
-                        />
-                    ) : (
-                        <select
-                            value={formData.brandId}
-                            onChange={e => setFormData({ ...formData, brandId: e.target.value })}
-                            style={inputStyle}
-                        >
-                            <option value="">Seleccionar marca existente...</option>
-                            {brands.map(b => (
-                                <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
-                            ))}
-                        </select>
-                    )}
-                </div>
-            )}
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label style={{ fontWeight: 600, fontSize: '14px' }}>Marca</label>
+                                <Button
+                                    variant="text"
+                                    type="button"
+                                    onClick={() => setFormData({
+                                        ...formData,
+                                        isNewBrand: !formData.isNewBrand,
+                                        brandId: '',
+                                        brandName: ''
+                                    })}
+                                    style={{ fontSize: '12px', color: 'var(--color-primary)', height: 'auto', padding: '2px 8px' }}
+                                >
+                                    {formData.isNewBrand ? 'Seleccionar existente' : 'Crear nueva marca'}
+                                </Button>
+                            </div>
 
-            {/* Read-only brand for existing products */}
-            {(!formData.isNewProduct && formData.productId) && (
-                <div style={sectionStyle}>
-                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '12px', display: 'block' }}>Marca</label>
-                    <div style={{
-                        padding: '10px',
-                        backgroundColor: 'var(--bg-card)',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-light)',
-                        color: 'var(--text-secondary)',
-                        fontSize: '14px',
-                        minHeight: '42px',
-                        display: 'flex',
-                        alignItems: 'center'
-                    }}>
-                        {products.find(p => p.codigo_producto == formData.productId)?.marca || 'General'}
-                    </div>
-                </div>
-            )}
+                            {formData.isNewBrand ? (
+                                <input
+                                    type="text"
+                                    placeholder="Nombre de la nueva marca..."
+                                    value={formData.brandName}
+                                    onChange={e => setFormData({ ...formData, brandName: e.target.value })}
+                                    style={inputStyle}
+                                />
+                            ) : (
+                                <select
+                                    value={formData.brandId}
+                                    onChange={e => setFormData({ ...formData, brandId: e.target.value })}
+                                    style={inputStyle}
+                                >
+                                    <option value="">Seleccionar marca...</option>
+                                    {brands.map(b => (
+                                        <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
 
             <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Detalles Adicionales</label>
