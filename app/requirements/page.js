@@ -23,26 +23,12 @@ export default function RequirementsPage() {
     // Filter State
     const [statusFilter, setStatusFilter] = useState('P'); // Default Pending
 
-    // Form State
-    const [formData, setFormData] = useState({
-        isNewProduct: false,
-        isNewBrand: false,
-        productId: '',
-        productName: '',
-        brandId: '',
-        brandName: '',
-        description: '',
-        requesterId: ''
-    });
-
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const saved = sessionStorage.getItem('currentUser');
             if (saved) {
                 const user = JSON.parse(saved);
                 setCurrentUser(user);
-                // Default requester to self
-                setFormData(prev => ({ ...prev, requesterId: user.id_usuario }));
             }
         }
         loadInitialData();
@@ -98,64 +84,12 @@ export default function RequirementsPage() {
         }
     };
 
-    const handleCreate = async (e) => {
-        e.preventDefault();
-
-        // Validation
-        if (!formData.isNewProduct && !formData.productId) {
-            showToast('Error', 'Selecciona un producto o marca "Nuevo producto"', 'error');
-            return;
-        }
-        if (formData.isNewProduct && !formData.productName) {
-            showToast('Error', 'Escribe el nombre del producto', 'error');
-            return;
-        }
-        if (!formData.requesterId) {
-            showToast('Error', 'El solicitante es obligatorio', 'error');
-            return;
-        }
-
+    const handleCreateRequirement = async (payload) => {
         try {
-            const selectedProduct = products.find(p => p.codigo_producto == formData.productId);
-            const selectedBrand = brands.find(b => b.id_marca == formData.brandId);
-
-            const payload = {
-                nombre_producto: formData.isNewProduct ? formData.productName : selectedProduct.nombre,
-                codigo_producto: formData.isNewProduct ? null : parseInt(formData.productId),
-                codigo_visible: !formData.isNewProduct ? selectedProduct.codigo_visible : null,
-                marca_texto: formData.isNewBrand ? formData.brandName : selectedBrand?.nombre || 'General',
-                id_marca: formData.isNewBrand ? null : (formData.brandId ? parseInt(formData.brandId) : (selectedProduct?.id_marca || null)),
-                descripcion: formData.description,
-                id_solicitante: formData.requesterId,
-                id_responsable: currentUser.id_usuario
-            };
-
-            // Enhanced Brand Logic for Consistency
-            if (!formData.isNewProduct && selectedProduct) {
-                payload.marca_texto = selectedProduct.marca || 'Desconocida';
-                payload.id_marca = selectedProduct.id_marca;
-            } else if (!formData.isNewBrand && selectedBrand) {
-                payload.marca_texto = selectedBrand.nombre;
-            } else if (!formData.isNewBrand && !selectedBrand && formData.isNewProduct) {
-                if (!payload.marca_texto) payload.marca_texto = 'Generica';
-            }
-
             await DB.createRequirement(payload);
             showToast('Éxito', 'Requerimiento creado correctamente', 'success');
             closeModal();
-            loadInitialData();
-
-            setFormData({
-                isNewProduct: false,
-                isNewBrand: false,
-                productId: '',
-                productName: '',
-                brandId: '',
-                brandName: '',
-                description: '',
-                requesterId: currentUser.id_usuario
-            });
-
+            loadInitialData(); // Refresh list
         } catch (error) {
             console.error("Error creating requirement:", error);
             showToast('Error', 'No se pudo crear el requerimiento', 'error');
@@ -202,13 +136,11 @@ export default function RequirementsPage() {
         openModal(
             'Nuevo Requerimiento',
             <RequirementForm
-                formData={formData}
-                setFormData={setFormData}
                 products={products}
                 brands={brands}
                 users={users}
                 currentUser={currentUser}
-                handleCreate={handleCreate}
+                onSubmit={handleCreateRequirement}
                 closeModal={closeModal}
             />
         );
@@ -328,11 +260,69 @@ export default function RequirementsPage() {
     );
 }
 
-// Sub-component for Form content to keep cleaner
-const RequirementForm = ({ formData, setFormData, products, brands, users, currentUser, handleCreate, closeModal }) => {
+// Sub-component that manages its own state to avoid Modal stale closure issues
+const RequirementForm = ({ products, brands, users, currentUser, onSubmit, closeModal }) => {
+    const { showToast } = useToast();
 
     // Only Admin/Supervisor can change requester
     const canChangeRequester = ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol);
+
+    // Initialize state
+    const [formData, setFormData] = useState({
+        isNewProduct: false,
+        isNewBrand: false,
+        productId: '',
+        productName: '',
+        brandId: '',
+        brandName: '',
+        description: '',
+        requesterId: currentUser?.id_usuario || ''
+    });
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        // Validation
+        if (!formData.isNewProduct && !formData.productId) {
+            showToast('Error', 'Selecciona un producto o marca "Nuevo producto"', 'error');
+            return;
+        }
+        if (formData.isNewProduct && !formData.productName) {
+            showToast('Error', 'Escribe el nombre del producto', 'error');
+            return;
+        }
+        if (!formData.requesterId) {
+            showToast('Error', 'El solicitante es obligatorio', 'error');
+            return;
+        }
+
+        const selectedProduct = products.find(p => p.codigo_producto == formData.productId);
+        const selectedBrand = brands.find(b => b.id_marca == formData.brandId);
+
+        const payload = {
+            nombre_producto: formData.isNewProduct ? formData.productName : selectedProduct.nombre,
+            codigo_producto: formData.isNewProduct ? null : parseInt(formData.productId),
+            codigo_visible: !formData.isNewProduct ? selectedProduct.codigo_visible : null,
+            marca_texto: formData.isNewBrand ? formData.brandName : selectedBrand?.nombre || 'General',
+            id_marca: formData.isNewBrand ? null : (formData.brandId ? parseInt(formData.brandId) : (selectedProduct?.id_marca || null)),
+            descripcion: formData.description,
+            id_solicitante: formData.requesterId,
+            id_responsable: currentUser.id_usuario // Creator
+        };
+
+        // Enhanced Brand Logic for Consistency
+        if (!formData.isNewProduct && selectedProduct) {
+            payload.marca_texto = selectedProduct.marca || 'Desconocida';
+            payload.id_marca = selectedProduct.id_marca;
+        } else if (!formData.isNewBrand && selectedBrand) {
+            payload.marca_texto = selectedBrand.nombre;
+        } else if (!formData.isNewBrand && !selectedBrand && formData.isNewProduct) {
+            if (!payload.marca_texto) payload.marca_texto = 'Generica';
+        }
+
+        // Pass to parent
+        onSubmit(payload);
+    };
 
     const inputStyle = {
         width: '100%', padding: '10px', borderRadius: '6px',
@@ -346,7 +336,7 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
     };
 
     return (
-        <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {canChangeRequester && (
                 <div className="form-group" style={{ margin: 0 }}>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Solicitante</label>
