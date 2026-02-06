@@ -140,41 +140,34 @@ export default function ProductsPage() {
                     </div>
                     <div>
                         <div style={{
-                            height: '180px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-light)',
                             background: 'var(--bg-subtle)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginBottom: '16px',
-                            overflow: 'hidden'
-                        }}>
-                            {product.imagen_url ? (
-                                <img src={product.imagen_url} alt={product.nombre} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            ) : (
-                                <Icons.Items size={64} style={{ color: 'var(--text-muted)' }} />
-                            )}
-                        </div>
-                        <div style={{
-                            background: isLow ? 'rgba(239,68,68,0.1)' : 'var(--bg-subtle)',
                             padding: '16px',
                             borderRadius: '8px',
-                            border: isLow ? '1px solid var(--color-danger)' : '1px solid var(--border-light)'
+                            border: '1px solid var(--border-light)',
+                            height: '100%'
                         }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
-                                <div>
-                                    <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</label>
+                                <div style={{ fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+                                    {product.descripcion || 'Sin descripción disponible.'}
                                 </div>
-                                <div>
-                                    <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
+                            </div>
+
+                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-light)' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -334,12 +327,8 @@ export default function ProductsPage() {
                             onClick={() => openProductModal(product.id, !canManage)}
                             style={{ cursor: 'pointer' }}
                         >
-                            <div className="product-card-image">
-                                {product.imagen_url ? (
-                                    <img src={product.imagen_url} alt={product.nombre} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                ) : (
-                                    <Icons.Items size={48} />
-                                )}
+                            <div className="product-card-image" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-subtle)' }}>
+                                <Icons.Items size={48} style={{ opacity: 0.3 }} />
                             </div>
                             <div className="product-card-body">
                                 <div className="product-card-code">{product.codigo_visible}</div>
@@ -388,11 +377,10 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
         stock_minimo: product?.stock_minimo || 0,
         ubicacion_principal: product?.ubicacion_principal || '',
         ubicacion_instrumentacion: product?.ubicacion_instrumentacion || '',
-        imagen_url: product?.imagen_url || ''
+        descripcion: product?.descripcion || ''
     });
 
-    const [imagePreview, setImagePreview] = useState(product?.imagen_url || '');
-    const fileInputRef = useRef(null);
+    const [categoryMode, setCategoryMode] = useState('select');
     const [categoryMode, setCategoryMode] = useState('select');
     const [brandMode, setBrandMode] = useState('select');
 
@@ -413,22 +401,7 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
     const rows = Array.from({ length: 30 }, (_, i) => (i + 1).toString().padStart(2, '0'));
     const levels = Array.from({ length: 4 }, (_, i) => (i + 1).toString().padStart(2, '0'));
 
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
 
-        if (file.size > 500 * 1024) {
-            alert('La imagen debe ser menor a 500KB');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            setImagePreview(event.target.result);
-            setFormData({ ...formData, imagen_url: event.target.result });
-        };
-        reader.readAsDataURL(file);
-    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -610,6 +583,23 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
                 </div>
             </div>
 
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>Descripción</label>
+                <textarea
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    rows={4}
+                    placeholder="Detalles técnicos, uso, observaciones..."
+                    style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        resize: 'vertical'
+                    }}
+                />
+            </div>
+
             {/* Locations */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                 <div className="form-group">
@@ -649,63 +639,7 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
             </div>
 
             {/* Image Upload */}
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-                <label>Imagen del Producto</label>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'start' }}>
-                    <div style={{
-                        width: '100px',
-                        height: '100px',
-                        borderRadius: '8px',
-                        border: '2px dashed var(--border-default)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'var(--bg-subtle)',
-                        overflow: 'hidden',
-                        flexShrink: 0
-                    }}>
-                        {imagePreview ? (
-                            <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                            <Icons.Items size={32} style={{ color: 'var(--text-muted)' }} />
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            accept="image/*"
-                            onChange={handleImageChange}
-                            style={{ display: 'none' }}
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => fileInputRef.current?.click()}
-                            style={{ width: '100%', marginBottom: '8px' }}
-                        >
-                            Seleccionar Imagen
-                        </Button>
-                        {imagePreview && (
-                            <Button
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => {
-                                    setImagePreview('');
-                                    setFormData({ ...formData, imagen_url: '' });
-                                }}
-                                style={{ width: '100%' }}
-                            >
-                                Quitar imagen
-                            </Button>
-                        )}
-                        <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Máximo 500KB. Formatos: JPG, PNG, WEBP
-                        </span>
-                    </div>
-                </div>
-            </div>
+
 
             {/* Footer */}
             <div style={{

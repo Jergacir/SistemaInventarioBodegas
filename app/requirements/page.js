@@ -309,16 +309,35 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
     // Only Admin/Supervisor can change requester
     const canChangeRequester = ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol);
 
+    // Helper for input styles
+    const inputStyle = {
+        width: '100%',
+        padding: '10px',
+        borderRadius: '6px',
+        border: '1px solid var(--border-color)',
+        backgroundColor: 'var(--bg-card)',
+        color: 'var(--text-primary)',
+        fontSize: '14px'
+    };
+
+    // Helper for section container
+    const sectionStyle = {
+        padding: '16px',
+        backgroundColor: 'var(--bg-subtle)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-light)'
+    };
+
     return (
-        <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Requester Selection */}
             {canChangeRequester && (
-                <div className="form-group">
-                    <label>Solicitante</label>
+                <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Solicitante</label>
                     <select
                         value={formData.requesterId}
                         onChange={e => setFormData({ ...formData, requesterId: e.target.value })}
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        style={inputStyle}
                     >
                         {users.map(u => (
                             <option key={u.id_usuario} value={u.id_usuario}>{u.nombre_completo}</option>
@@ -328,10 +347,12 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
             )}
 
             {/* Product Section */}
-            <div style={{ padding: '10px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <label style={{ fontWeight: 600 }}>Producto</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={sectionStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Producto</label>
+
+                    {/* Toggle Switch Style */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
                         <input
                             type="checkbox"
                             checked={formData.isNewProduct}
@@ -340,65 +361,87 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                                 isNewProduct: e.target.checked,
                                 productId: '',
                                 productName: '',
-                                // If switching to new product, we allow new brand selection freely
                                 isNewBrand: e.target.checked ? formData.isNewBrand : false
                             })}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                         />
-                        <span style={{ fontSize: '13px' }}>¿Es un producto nuevo?</span>
-                    </div>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Es nuevo?</span>
+                    </label>
                 </div>
 
                 {formData.isNewProduct ? (
-                    <input
-                        type="text"
-                        placeholder="Nombre del producto nuevo..."
-                        value={formData.productName}
-                        onChange={e => setFormData({ ...formData, productName: e.target.value })}
-                        style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
-                    />
+                    <div className="animate-fade-in">
+                        <input
+                            type="text"
+                            placeholder="Nombre del producto nuevo..."
+                            value={formData.productName}
+                            onChange={e => setFormData({ ...formData, productName: e.target.value })}
+                            style={inputStyle}
+                            autoFocus
+                        />
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                            Este producto no se agregará al catálogo oficial automáticamente.
+                        </div>
+                    </div>
                 ) : (
-                    <select
-                        value={formData.productId}
-                        onChange={e => {
-                            const pid = e.target.value;
-                            const prod = products.find(p => p.codigo_producto == pid);
-                            setFormData({
-                                ...formData,
-                                productId: pid,
-                                // If selecting existing product, mostly lock brand to that product's brand
-                                brandId: prod?.id_marca || '',
-                                isNewBrand: false
-                            });
-                        }}
-                        style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
-                    >
-                        <option value="">Seleccionar del catálogo...</option>
-                        {products.map(p => (
-                            <option key={p.codigo_producto} value={p.codigo_producto}>{p.nombre} ({p.codigo_visible})</option>
-                        ))}
-                    </select>
+                    <div>
+                        <select
+                            value={formData.productId}
+                            onChange={e => {
+                                const pid = e.target.value;
+                                const prod = products.find(p => p.codigo_producto == pid);
+                                setFormData({
+                                    ...formData,
+                                    productId: pid,
+                                    brandId: prod?.id_marca || '',
+                                    isNewBrand: false
+                                });
+                            }}
+                            style={inputStyle}
+                        >
+                            <option value="">Seleccionar del catálogo...</option>
+                            {products.map(p => (
+                                <option key={p.codigo_producto} value={p.codigo_producto}>
+                                    {p.nombre} {p.marca ? `- ${p.marca}` : ''} ({p.codigo_visible})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 )}
             </div>
 
-            {/* Brand Section - Only show if New Product or specific override logic needed */}
-            <div style={{ padding: '10px', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <label style={{ fontWeight: 600 }}>Marca</label>
+            {/* Brand Section */}
+            <div style={sectionStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <label style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>Marca</label>
                     {(formData.isNewProduct) && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
                             <input
                                 type="checkbox"
                                 checked={formData.isNewBrand}
                                 onChange={e => setFormData({ ...formData, isNewBrand: e.target.checked, brandId: '', brandName: '' })}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                             />
-                            <span style={{ fontSize: '13px' }}>¿Nueva marca?</span>
-                        </div>
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Nueva marca?</span>
+                        </label>
                     )}
                 </div>
 
                 {!formData.isNewProduct ? (
-                    <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                        {products.find(p => p.codigo_producto == formData.productId)?.marca || 'Selecciona un producto primero'}
+                    <div style={{
+                        padding: '10px',
+                        backgroundColor: 'var(--bg-card)',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-light)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '14px',
+                        minHeight: '42px',
+                        display: 'flex',
+                        alignItems: 'center'
+                    }}>
+                        {products.find(p => p.codigo_producto == formData.productId)?.marca || (
+                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Selecciona un producto arriba</span>
+                        )}
                     </div>
                 ) : formData.isNewBrand ? (
                     <input
@@ -406,15 +449,15 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                         placeholder="Nombre de la marca..."
                         value={formData.brandName}
                         onChange={e => setFormData({ ...formData, brandName: e.target.value })}
-                        style={{ width: '100%', padding: '8px' }}
+                        style={inputStyle}
                     />
                 ) : (
                     <select
                         value={formData.brandId}
                         onChange={e => setFormData({ ...formData, brandId: e.target.value })}
-                        style={{ width: '100%', padding: '8px' }}
+                        style={inputStyle}
                     >
-                        <option value="">Seleccionar marca...</option>
+                        <option value="">Seleccionar marca existente...</option>
                         {brands.map(b => (
                             <option key={b.id_marca} value={b.id_marca}>{b.nombre}</option>
                         ))}
@@ -422,19 +465,20 @@ const RequirementForm = ({ formData, setFormData, products, brands, users, curre
                 )}
             </div>
 
-            <div className="form-group">
-                <label>Descripción / Detalles Adicionales</label>
+            <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 500 }}>Detalles Adicionales</label>
                 <textarea
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                     rows={3}
-                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                    placeholder="Descripción, link de referencia, o motivo de la solicitud..."
+                    style={{ ...inputStyle, resize: 'vertical' }}
                 />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px', paddingTop: '15px', borderTop: '1px solid var(--border-light)' }}>
                 <Button variant="secondary" onClick={closeModal} type="button">Cancelar</Button>
-                <Button variant="primary" type="submit">Crear Requerimiento</Button>
+                <Button variant="primary" type="submit">Enviar Solicitud</Button>
             </div>
         </form>
     );

@@ -135,41 +135,34 @@ export default function InventoryPage() {
                     </div>
                     <div>
                         <div style={{
-                            height: '180px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-light)',
                             background: 'var(--bg-subtle)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginBottom: '16px',
-                            overflow: 'hidden'
-                        }}>
-                            {product.imagen_url ? (
-                                <img src={product.imagen_url} alt={product.nombre} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            ) : (
-                                <Icons.Items size={64} style={{ color: 'var(--text-muted)' }} />
-                            )}
-                        </div>
-                        <div style={{
-                            background: isLow ? 'rgba(239,68,68,0.1)' : 'var(--bg-subtle)',
                             padding: '16px',
                             borderRadius: '8px',
-                            border: isLow ? '1px solid var(--color-danger)' : '1px solid var(--border-light)'
+                            border: '1px solid var(--border-light)',
+                            height: '100%'
                         }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
-                                <div>
-                                    <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</label>
+                                <div style={{ fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+                                    {product.descripcion || 'Sin descripción disponible.'}
                                 </div>
-                                <div>
-                                    <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
+                            </div>
+
+                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-light)' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
