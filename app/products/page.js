@@ -7,7 +7,7 @@ import { useModal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 import { DB } from '../lib/database';
 import { Helpers } from '../lib/utils/helpers';
-import * as XLSX from 'xlsx';
+import { MockData } from '../lib/mockData';
 
 export default function ProductsPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -83,15 +83,102 @@ export default function ProductsPage() {
         const isEdit = !!product;
 
         if (readOnly) {
-            // We use a separate component for ReadOnly to manage state (tabs, history data)
-            openModal(
-                'Detalles del Producto',
-                <ProductDetails product={product} closeModal={closeModal} />,
-                'xl'
-            );
+            showReadOnlyModal(product);
         } else {
             showEditModal(product, isEdit);
         }
+    };
+
+    const showReadOnlyModal = (product) => {
+        const totalStock = product.stock_total || 0;
+        const stockPrincipal = product.stock_principal || 0;
+        const stockInstrum = product.stock_instrumentacion || 0;
+        const isLow = totalStock <= product.stock_minimo;
+
+        openModal(
+            'Información del Producto',
+            <div style={{ padding: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Código</label>
+                            <div style={{ fontSize: '16px', fontFamily: 'monospace', color: 'var(--color-primary)' }}>{product.codigo_visible}</div>
+                        </div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Producto</label>
+                            <div style={{ fontSize: '16px', fontWeight: 500 }}>{product.nombre}</div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Categoría</label>
+                                <div>{product.categoria}</div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Marca</label>
+                                <div>{product.marca || '-'}</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Unidad</label>
+                                <div>{product.unidad_medida}</div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Stock Mínimo</label>
+                                <div>{product.stock_minimo}</div>
+                            </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Ubicaciones</label>
+                            <div style={{ fontSize: '14px', marginBottom: '4px' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Principal:</span> {product.ubicacion_principal || 'N/A'}
+                            </div>
+                            <div style={{ fontSize: '14px' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Instrumentación:</span> {product.ubicacion_instrumentacion || 'N/A'}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{
+                            background: 'var(--bg-subtle)',
+                            padding: '16px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-light)',
+                            height: '100%'
+                        }}>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</label>
+                                <div style={{ fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
+                                    {product.descripcion || 'Sin descripción disponible.'}
+                                </div>
+                            </div>
+
+                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-light)' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
+                </div>
+            </div>,
+            'xl'
+        );
     };
 
     const showEditModal = (product, isEdit) => {
@@ -129,6 +216,7 @@ export default function ProductsPage() {
             loadProducts(); // Reload only products
 
             // Reload categories/brands if new ones might have been created
+            // Optimization: Only do this if we suspect new ones, or just strict reload
             if (data.categoria && !categories.includes(data.categoria)) {
                 const newCats = await DB.getAllCategories();
                 setCategories(newCats);
@@ -145,7 +233,10 @@ export default function ProductsPage() {
     };
 
     const deleteProduct = async (productId) => {
-        const product = Helpers.getProduct(productId) || products.find(p => p.id === productId);
+        const product = Helpers.getProduct(productId) || products.find(p => p.id === productId); // Fallback to state if Helper not updated
+        // Note: Helpers.getProduct is sync and uses MockData directly usually. 
+        // If we are fully Supabase, Helpers might be broken if it imports MockData.
+        // But for now, let's rely on finding it in our 'products' state which is hydrated.
 
         if (!product) return;
 
@@ -272,259 +363,6 @@ export default function ProductsPage() {
                 </div>
             )}
         </MainLayout>
-    );
-}
-
-// Sub-component for Product Details (Tabs: Details | History)
-function ProductDetails({ product, closeModal }) {
-    const [activeTab, setActiveTab] = useState('details');
-    const [movements, setMovements] = useState([]);
-    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-
-    // History filters
-    const [dateStart, setDateStart] = useState('');
-    const [dateEnd, setDateEnd] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
-
-    const { showToast } = useToast();
-
-    useEffect(() => {
-        if (activeTab === 'history') {
-            loadHistory();
-        }
-    }, [activeTab]);
-
-    const loadHistory = async () => {
-        setIsLoadingHistory(true);
-        try {
-            const data = await DB.getMovementsByProduct(product.codigo_producto);
-            setMovements(data || []);
-        } catch (error) {
-            console.error("Error loading history:", error);
-            showToast('Error', 'No se pudo cargar el historial', 'error');
-        } finally {
-            setIsLoadingHistory(false);
-        }
-    };
-
-    const filteredMovements = useMemo(() => {
-        let result = [...movements];
-        const dbTypeMap = { 'ENTRADA': 'ENT', 'SALIDA': 'SAL', 'TRANSFERENCIA': 'TRF' };
-
-        if (dateStart) {
-            result = result.filter(m => new Date(m.fechaHoraSolicitud) >= new Date(dateStart));
-        }
-        if (dateEnd) {
-            const endDate = new Date(dateEnd);
-            endDate.setHours(23, 59, 59, 999);
-            result = result.filter(m => new Date(m.fechaHoraSolicitud) <= endDate);
-        }
-        if (typeFilter) {
-            result = result.filter(m => m.tipo === dbTypeMap[typeFilter]);
-        }
-        return result;
-    }, [movements, dateStart, dateEnd, typeFilter]);
-
-    const exportToExcel = () => {
-        const headers = ['Código', 'Tipo', 'Cantidad', 'Origen', 'Destino', 'Estado', 'Solicitante', 'Fecha'];
-        const typeNames = { 'ENT': 'ENTRADA', 'SAL': 'SALIDA', 'TRF': 'TRANSFERENCIA' };
-        const statusNames = { 'C': 'COMPLETADO', 'P': 'PENDIENTE', 'R': 'RECHAZADO' };
-
-        const rows = filteredMovements.map(mov => [
-            mov.codigo_movimiento,
-            typeNames[mov.tipo] || mov.tipo,
-            mov.cantidad,
-            mov.bodega_origen?.nombre || 'Externo',
-            mov.bodega_destino?.nombre || 'Externo',
-            statusNames[mov.estado] || mov.estado,
-            mov.solicitante?.nombre_completo || 'Sistema',
-            Helpers.formatDateTime(mov.fechaHoraSolicitud)
-        ]);
-
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-        XLSX.utils.book_append_sheet(wb, ws, "Historial_Producto");
-        XLSX.writeFile(wb, `historial_producto_${product.codigo_visible}_${new Date().toISOString().split('T')[0]}.xlsx`);
-        showToast('Exportación Completada', 'Excel generado correctamente', 'success');
-    };
-
-    const totalStock = product.stock_total || 0;
-    const stockPrincipal = product.stock_principal || 0;
-    const stockInstrum = product.stock_instrumentacion || 0;
-    const isLow = totalStock <= product.stock_minimo;
-
-    return (
-        <div style={{ padding: '10px' }}>
-            {/* Tabs Header */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)', marginBottom: '20px' }}>
-                <button
-                    onClick={() => setActiveTab('details')}
-                    style={{
-                        padding: '10px 20px',
-                        background: 'transparent',
-                        borderBottom: activeTab === 'details' ? '2px solid var(--color-primary)' : 'none',
-                        color: activeTab === 'details' ? 'var(--color-primary)' : 'var(--text-secondary)',
-                        fontWeight: activeTab === 'details' ? 600 : 400,
-                        cursor: 'pointer'
-                    }}
-                >
-                    Detalles
-                </button>
-                <button
-                    onClick={() => setActiveTab('history')}
-                    style={{
-                        padding: '10px 20px',
-                        background: 'transparent',
-                        borderBottom: activeTab === 'history' ? '2px solid var(--color-primary)' : 'none',
-                        color: activeTab === 'history' ? 'var(--color-primary)' : 'var(--text-secondary)',
-                        fontWeight: activeTab === 'history' ? 600 : 400,
-                        cursor: 'pointer'
-                    }}
-                >
-                    Historial
-                </button>
-            </div>
-
-            {activeTab === 'details' ? (
-                // DETAILS VIEW
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                    <div>
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Código</label>
-                            <div style={{ fontSize: '16px', fontFamily: 'monospace', color: 'var(--color-primary)' }}>{product.codigo_visible}</div>
-                        </div>
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Producto</label>
-                            <div style={{ fontSize: '16px', fontWeight: 500 }}>{product.nombre}</div>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                            <div>
-                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Categoría</label>
-                                <div>{product.categoria}</div>
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Marca</label>
-                                <div>{product.marca || '-'}</div>
-                            </div>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-                            <div>
-                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Unidad</label>
-                                <div>{product.unidad_medida}</div>
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Stock Mínimo</label>
-                                <div>{product.stock_minimo}</div>
-                            </div>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '4px' }}>Ubicaciones</label>
-                            <div style={{ fontSize: '14px', marginBottom: '4px' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>Principal:</span> {product.ubicacion_principal || 'N/A'}
-                            </div>
-                            <div style={{ fontSize: '14px' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>Instrumentación:</span> {product.ubicacion_instrumentacion || 'N/A'}
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <div style={{
-                            background: 'var(--bg-subtle)',
-                            padding: '16px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-light)',
-                            height: '100%'
-                        }}>
-                            <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase' }}>Descripción</label>
-                                <div style={{ fontSize: '14px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
-                                    {product.descripcion || 'Sin descripción disponible.'}
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-light)' }}>
-                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textTransform: 'uppercase' }}>Stock</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
-                                    <div>
-                                        <div style={{ fontSize: '20px', fontWeight: 700, color: isLow ? 'var(--color-danger)' : 'var(--text-primary)' }}>{totalStock}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total</div>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockPrincipal}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Principal</div>
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: '16px', fontWeight: 600 }}>{stockInstrum}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Instrum.</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                // HISTORY VIEW
-                <div>
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-                        <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
-                        <span style={{ alignSelf: 'center' }}>-</span>
-                        <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
-                        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                            <option value="">Todos los tipos</option>
-                            <option value="ENTRADA">Entrada</option>
-                            <option value="SALIDA">Salida</option>
-                            <option value="TRANSFERENCIA">Transferencia</option>
-                        </select>
-                        <Button variant="secondary" onClick={exportToExcel} style={{ marginLeft: 'auto' }}>
-                            <Icons.Export size={16} /> Exportar Excel
-                        </Button>
-                    </div>
-
-                    {isLoadingHistory ? (
-                        <div style={{ textAlign: 'center', padding: '20px' }}>Cargando historial...</div>
-                    ) : filteredMovements.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>No hay movimientos registrados.</div>
-                    ) : (
-                        <div style={{ overflowX: 'auto' }}>
-                            <table className="data-table" style={{ fontSize: '13px' }}>
-                                <thead>
-                                    <tr>
-                                        <th>Fecha</th>
-                                        <th>Tipo</th>
-                                        <th>Cant.</th>
-                                        <th>Origen / Destino</th>
-                                        <th>Solicitante</th>
-                                        <th>Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredMovements.map(m => (
-                                        <tr key={m.id_movimiento}>
-                                            <td>{Helpers.formatDateTime(m.fechaHoraSolicitud)}</td>
-                                            <td><Badge variant={m.tipo === 'ENT' ? 'completed' : m.tipo === 'SAL' ? 'cancelled' : 'pending'}>{m.tipo}</Badge></td>
-                                            <td style={{ fontWeight: 600, color: m.tipo === 'ENT' ? 'var(--color-success)' : m.tipo === 'SAL' ? 'var(--color-danger)' : 'inherit' }}>
-                                                {m.tipo === 'SAL' ? '-' : '+'}{m.cantidad}
-                                            </td>
-                                            <td>
-                                                {m.tipo === 'ENT' ? `${m.bodega_origen?.nombre || 'Prov.'} → ${m.bodega_destino?.nombre}` :
-                                                    m.tipo === 'SAL' ? `${m.bodega_origen?.nombre} → ${m.bodega_destino?.nombre || 'Cliente'}` :
-                                                        `${m.bodega_origen?.nombre} → ${m.bodega_destino?.nombre}`}
-                                            </td>
-                                            <td>{m.solicitante?.nombre_completo}</td>
-                                            <td><StatusBadge status={m.estado} /></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'flex-end' }}>
-                <Button variant="secondary" onClick={closeModal}>Cerrar</Button>
-            </div>
-        </div>
     );
 }
 
