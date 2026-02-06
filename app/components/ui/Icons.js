@@ -78,6 +78,7 @@ export const Icons = {
     Moon,
     LogOut, // Add direct export for component usage
     AlertTriangle, // Add direct export for component usage
-    Refresh: RotateCcw
+    Refresh: RotateCcw,
+    Trash: Trash2 // Alias for Delete
 };
 

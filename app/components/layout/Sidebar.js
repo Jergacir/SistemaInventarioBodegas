@@ -33,7 +33,7 @@ export const Sidebar = ({ isOpen, toggleSidebar, user }) => {
         { id: 'requests', label: 'Solicitudes', icon: 'File', path: '/requests', roles: ['ADMIN', 'SUPERVISOR'] },
         // { id: 'transfers', label: 'Transferencias', icon: 'Transfers', path: '/transfers' }, // Disabled per user request
         { id: 'exits', label: 'Salidas', icon: 'Truck', path: '/exits' },
-        { id: 'history', label: 'Historial', icon: 'Movements', path: '/history', roles: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'history', label: 'Historial', icon: 'Movements', path: '/history', roles: ['ADMIN', 'SUPERVISOR', 'OPERADOR'] },
         { id: 'users', label: 'Usuarios', icon: 'Users', path: '/users', roles: ['ADMIN'] },
         { id: 'settings', label: 'Configuración', icon: 'Settings', path: '/settings' },
         { id: 'requirements', label: 'Requerimientos', icon: 'File', path: '/requirements' }
