@@ -381,7 +381,7 @@ function ProductForm({ product, isEdit, categories, brands, onSave, onDelete, on
     });
 
     const [categoryMode, setCategoryMode] = useState('select');
-    const [categoryMode, setCategoryMode] = useState('select');
+
     const [brandMode, setBrandMode] = useState('select');
 
     // Parse location into parts
